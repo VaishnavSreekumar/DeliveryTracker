@@ -124,9 +124,12 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
                 // STEP 7: Create customer notification 1 (Reschedule confirmation)
                 var notification1 = new Notification
                 {
+                    UserId = customer.Id,
                     OrderId = order.Id,
+                    Title = $"Delivery Rescheduled - {order.TrackingNumber}",
                     RecipientEmail = customer.Email,
                     Message = $"Order {order.TrackingNumber} has been rescheduled for {request.RescheduledDate:yyyy-MM-dd}.",
+                    IsRead = false,
                     SentAt = now
                 };
                 _context.Notifications.Add(notification1);
@@ -139,9 +142,12 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
                 // STEP 12: Create customer notification 2 (Reassignment confirmation)
                 var notification2 = new Notification
                 {
+                    UserId = customer.Id,
                     OrderId = order.Id,
+                    Title = $"Agent Reassigned - {order.TrackingNumber}",
                     RecipientEmail = customer.Email,
                     Message = $"Order {order.TrackingNumber} has been rescheduled and assigned to Agent {newAssignmentResult.AssignedAgent.Name}.",
+                    IsRead = false,
                     SentAt = DateTime.UtcNow
                 };
                 _context.Notifications.Add(notification2);

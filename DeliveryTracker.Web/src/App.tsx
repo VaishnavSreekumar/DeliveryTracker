@@ -37,6 +37,7 @@ const AppContent: React.FC = () => {
           setActiveTab(tab);
         }}
         title={`Order Detail #${selectedOrderId}`}
+        onSelectOrder={(id) => setSelectedOrderId(id)}
       >
         <OrderDetailPage orderId={selectedOrderId} onBack={() => setSelectedOrderId(null)} />
       </Layout>
@@ -68,6 +69,7 @@ const AppContent: React.FC = () => {
         setActiveTab(tab);
       }}
       title={getTitle()}
+      onSelectOrder={(id) => setSelectedOrderId(id)}
     >
       {activeTab === 'create-order' && (
         <CustomerCreateOrderPage

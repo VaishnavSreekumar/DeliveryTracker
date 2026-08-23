@@ -1,15 +1,17 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Truck, PackagePlus, ListOrdered, Shield, LogOut, User as UserIcon } from 'lucide-react';
+import { NotificationCenter } from './NotificationCenter';
 
 interface LayoutProps {
   children: React.ReactNode;
   activeTab: 'orders' | 'create-order' | 'operations';
   onTabChange: (tab: 'orders' | 'create-order' | 'operations') => void;
   title: string;
+  onSelectOrder?: (orderId: number) => void;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, title }) => {
+export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, title, onSelectOrder }) => {
   const { user, logout } = useAuth();
 
   return (
@@ -195,9 +197,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
             {title}
           </h2>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-            <span>Environment: <strong>Local Development</strong></span>
-            <span>API Server: <strong>http://localhost:5055</strong></span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            {onSelectOrder && <NotificationCenter onSelectOrder={onSelectOrder} />}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+              <span>Environment: <strong>Local Development</strong></span>
+              <span>API Server: <strong>http://localhost:5055</strong></span>
+            </div>
           </div>
         </header>
 

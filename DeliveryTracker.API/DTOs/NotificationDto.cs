@@ -1,18 +1,14 @@
-namespace DeliveryTracker.API.Entities;
+namespace DeliveryTracker.API.DTOs;
 
-public class Notification
+public class NotificationDto
 {
     public int Id { get; set; }
-
     public int UserId { get; set; }
-    public User? User { get; set; }
-
     public int OrderId { get; set; }
-    public Order? Order { get; set; }
-
+    public string OrderTrackingNumber { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Message { get; set; } = string.Empty;
     public string RecipientEmail { get; set; } = string.Empty;
-    public bool IsRead { get; set; } = false;
-    public DateTime SentAt { get; set; } = DateTime.UtcNow;
+    public bool IsRead { get; set; }
+    public DateTime SentAt { get; set; }
 }

@@ -103,9 +103,12 @@ public class OrderStatusService : IOrderStatusService
                     var customerUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == order.CustomerId);
                     var notification = new Notification
                     {
+                        UserId = order.CustomerId,
                         OrderId = order.Id,
+                        Title = $"Delivery Attempt Failed - {order.TrackingNumber}",
                         RecipientEmail = customerUser?.Email ?? "customer@delivery.com",
                         Message = $"Delivery attempt failed for order {order.TrackingNumber}. Reason: {request.Notes ?? "Delivery failed"}. Please reschedule your delivery.",
+                        IsRead = false,
                         SentAt = now
                     };
                     _context.Notifications.Add(notification);

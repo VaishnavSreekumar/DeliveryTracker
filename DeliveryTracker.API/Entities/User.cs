@@ -13,4 +13,5 @@ public class User
 
     public Agent? AgentProfile { get; set; }
     public ICollection<Order> Orders { get; set; } = new List<Order>();
+    public ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 }

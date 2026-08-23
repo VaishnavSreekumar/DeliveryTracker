@@ -103,3 +103,15 @@ export interface PriceCalculationResult {
   codSurcharge: number;
   totalAmount: number;
 }
+
+export interface AppNotification {
+  id: number;
+  userId: number;
+  orderId: number;
+  orderTrackingNumber: string;
+  title: string;
+  message: string;
+  recipientEmail: string;
+  isRead: boolean;
+  sentAt: string;
+}
