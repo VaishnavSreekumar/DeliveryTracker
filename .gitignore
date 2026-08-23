@@ -1,0 +1,25 @@
+# .NET build and user artifacts
+bin/
+obj/
+out/
+.vs/
+*.user
+*.suo
+
+# Node & Frontend dependencies
+node_modules/
+dist/
+.vite/
+*.log
+
+# SQLite local dev database (created dynamically via EF Migrations on startup)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# OS / IDE generated files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

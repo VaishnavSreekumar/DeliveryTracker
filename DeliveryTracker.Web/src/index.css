@@ -1,0 +1,187 @@
+/* DeliveryTracker Design Tokens - Precise, Calm, Information-Dense Logistics Operations */
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* Color Palette - Restrained Slate & Steel Theme */
+  --bg-app: #0f172a;
+  --bg-sidebar: #1e293b;
+  --bg-surface: #1e293b;
+  --bg-surface-hover: #334155;
+  --bg-surface-active: #475569;
+  --bg-input: #0f172a;
+
+  --border-subtle: #334155;
+  --border-strong: #475569;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-inverse: #0f172a;
+
+  --brand-primary: #38bdf8;
+  --brand-primary-hover: #0284c7;
+  --brand-accent: #0ea5e9;
+
+  /* Status Colors */
+  --status-created-bg: rgba(148, 163, 184, 0.15);
+  --status-created-fg: #cbd5e1;
+  --status-created-border: rgba(148, 163, 184, 0.3);
+
+  --status-pickedup-bg: rgba(56, 189, 248, 0.15);
+  --status-pickedup-fg: #38bdf8;
+  --status-pickedup-border: rgba(56, 189, 248, 0.3);
+
+  --status-intransit-bg: rgba(99, 102, 241, 0.15);
+  --status-intransit-fg: #818cf8;
+  --status-intransit-border: rgba(99, 102, 241, 0.3);
+
+  --status-outfordelivery-bg: rgba(245, 158, 11, 0.15);
+  --status-outfordelivery-fg: #fbbf24;
+  --status-outfordelivery-border: rgba(245, 158, 11, 0.3);
+
+  --status-delivered-bg: rgba(16, 185, 129, 0.15);
+  --status-delivered-fg: #34d399;
+  --status-delivered-border: rgba(16, 185, 129, 0.3);
+
+  --status-failed-bg: rgba(244, 63, 94, 0.15);
+  --status-failed-fg: #fb7185;
+  --status-failed-border: rgba(244, 63, 94, 0.3);
+
+  --status-rescheduled-bg: rgba(168, 85, 247, 0.15);
+  --status-rescheduled-fg: #c084fc;
+  --status-rescheduled-border: rgba(168, 85, 247, 0.3);
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-app);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Technical Monospace Elements */
+.tracking-mono {
+  font-family: var(--font-mono);
+  letter-spacing: 0.03em;
+  font-weight: 600;
+}
+
+/* Utilities */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.btn-primary {
+  background-color: var(--brand-primary);
+  color: var(--text-inverse);
+}
+.btn-primary:hover {
+  background-color: var(--brand-primary-hover);
+}
+
+.btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border-subtle);
+}
+.btn-secondary:hover {
+  background-color: var(--bg-surface-hover);
+  border-color: var(--border-strong);
+}
+
+.btn-danger {
+  background-color: rgba(244, 63, 94, 0.2);
+  color: #fb7185;
+  border-color: rgba(244, 63, 94, 0.4);
+}
+.btn-danger:hover {
+  background-color: rgba(244, 63, 94, 0.3);
+}
+
+.btn-sm {
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+}
+
+.card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+}
+
+.input-field {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  outline: none;
+  font-size: 0.875rem;
+}
+.input-field:focus {
+  border-color: var(--brand-primary);
+}
+
+.label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.35rem;
+}
