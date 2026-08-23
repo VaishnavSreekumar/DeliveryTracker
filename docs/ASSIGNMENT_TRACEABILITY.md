@@ -11,7 +11,7 @@
 | :--- | :--- | :--- |
 | `dotnet build` (API) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
 | `dotnet build` (Tests) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
-| `dotnet test` (83 tests) | ✅ **83/83 PASSED** | Failed: 0, Passed: 83, Skipped: 0 |
+| `dotnet test` (85 tests) | ✅ **85/85 PASSED** | Failed: 0, Passed: 85, Skipped: 0 |
 | `npm run build` (Frontend) | ✅ **Exit 0** | TypeScript compiled clean, Vite bundle 307.48 kB |
 
 ### Test Suite Breakdown
@@ -26,8 +26,8 @@
 | `OrderServiceTests` | 11 | Order creation, volumetric pricing persistence, customer scoping, admin visibility |
 | `AdminConfigurationTests` | 6 | Zones CRUD, Areas CRUD & Zone Reassignment, RateCards update, dynamic pricing |
 | `AdminOrderOperationsTests` | 4 | Order booking for customer, manual agent assignment, status override, multi-filter |
-| `CommunicationNotificationTests` | 4 | Multi-channel dispatch, provider failure safety, simulated delivery status, admin audit log |
-| **Total** | **83** | **100% Pass Rate** |
+| `CommunicationNotificationTests` | 6 | Multi-channel dispatch (InApp, Email, SMS) on every transition, provider fault safety, live vs simulation status, customer isolation, admin audit log |
+| **Total** | **85** | **100% Pass Rate** |
 
 ---
 

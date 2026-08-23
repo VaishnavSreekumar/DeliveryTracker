@@ -36,11 +36,17 @@ public class SmtpEmailProvider : IEmailNotificationProvider
 
     public async Task<CommunicationResult> SendEmailAsync(string recipientEmail, string subject, string body, string eventType, int? orderId = null)
     {
+        var enabled = _configuration["EMAIL_ENABLED"] ?? _configuration["Notification:Email:Enabled"] ?? "true";
+        if (enabled.Equals("false", StringComparison.OrdinalIgnoreCase))
+        {
+            return CommunicationResult.Ok("SmtpEmailProvider(Disabled)", "DISABLED");
+        }
+
         var host = _configuration["Notification:Email:Smtp:Host"] ?? _configuration["SMTP_HOST"];
         var portStr = _configuration["Notification:Email:Smtp:Port"] ?? _configuration["SMTP_PORT"];
         var username = _configuration["Notification:Email:Smtp:Username"] ?? _configuration["SMTP_USERNAME"];
         var password = _configuration["Notification:Email:Smtp:Password"] ?? _configuration["SMTP_PASSWORD"];
-        var fromAddress = _configuration["Notification:Email:FromAddress"] ?? _configuration["NOTIFICATION_EMAIL_FROM"] ?? "notifications@deliverytracker.com";
+        var fromAddress = _configuration["Notification:Email:FromAddress"] ?? _configuration["SMTP_FROM"] ?? _configuration["NOTIFICATION_EMAIL_FROM"] ?? "notifications@deliverytracker.com";
 
         if (string.IsNullOrWhiteSpace(host) || !int.TryParse(portStr, out int port) || string.IsNullOrWhiteSpace(username) || username.StartsWith("your_"))
         {
@@ -106,9 +112,15 @@ public class TwilioSmsProvider : ISmsNotificationProvider
 
     public async Task<CommunicationResult> SendSmsAsync(string recipientPhone, string message, string eventType, int? orderId = null)
     {
+        var enabled = _configuration["SMS_ENABLED"] ?? _configuration["Notification:Sms:Enabled"] ?? "true";
+        if (enabled.Equals("false", StringComparison.OrdinalIgnoreCase))
+        {
+            return CommunicationResult.Ok("TwilioSmsProvider(Disabled)", "DISABLED");
+        }
+
         var accountSid = _configuration["Notification:Sms:Twilio:AccountSid"] ?? _configuration["TWILIO_ACCOUNT_SID"];
         var authToken = _configuration["Notification:Sms:Twilio:AuthToken"] ?? _configuration["TWILIO_AUTH_TOKEN"];
-        var fromNumber = _configuration["Notification:Sms:FromNumber"] ?? _configuration["NOTIFICATION_SMS_FROM"] ?? "+18005550199";
+        var fromNumber = _configuration["Notification:Sms:FromNumber"] ?? _configuration["TWILIO_FROM_NUMBER"] ?? _configuration["NOTIFICATION_SMS_FROM"] ?? "+18005550199";
 
         if (string.IsNullOrWhiteSpace(accountSid) || string.IsNullOrWhiteSpace(authToken) || accountSid.StartsWith("your_"))
         {

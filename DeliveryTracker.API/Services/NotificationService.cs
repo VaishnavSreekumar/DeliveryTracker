@@ -45,7 +45,7 @@ public class NotificationService : INotificationService
 
         var notificationsToSave = new List<Notification>();
 
-        // 1. IN-APP Notification Channel (Only if not already created)
+        // 1. IN-APP Notification Channel (Only if not already created within 10s)
         bool hasInApp = await _context.Notifications
             .AnyAsync(n => n.OrderId == orderId && n.Channel == CommunicationChannel.InApp && n.EventType == eventType && n.SentAt >= now.AddSeconds(-10));
 
@@ -87,6 +87,12 @@ public class NotificationService : INotificationService
             emailResult = CommunicationResult.Fail("EmailProvider", ex.Message);
         }
 
+        var emailDeliveryStatus = !emailResult.Success
+            ? CommunicationStatus.Failed
+            : (emailResult.Provider.Contains("Simulated") || emailResult.Provider.Contains("Development")
+                ? CommunicationStatus.Simulated
+                : CommunicationStatus.Sent);
+
         var emailLog = new Notification
         {
             UserId = userId,
@@ -98,13 +104,13 @@ public class NotificationService : INotificationService
             IsRead = true,
             Channel = CommunicationChannel.Email,
             EventType = eventType,
-            DeliveryStatus = emailResult.Success ? CommunicationStatus.Simulated : CommunicationStatus.Failed,
+            DeliveryStatus = emailDeliveryStatus,
             ErrorMessage = emailResult.ErrorMessage,
             SentAt = now
         };
         notificationsToSave.Add(emailLog);
 
-        // 3. SMS Notification Channel (For critical lifecycle events)
+        // 3. SMS Notification Channel (Dispatched on every status change event)
         if (ShouldSendSmsForEvent(eventType))
         {
             CommunicationResult smsResult;
@@ -118,6 +124,12 @@ public class NotificationService : INotificationService
                 smsResult = CommunicationResult.Fail("SmsProvider", ex.Message);
             }
 
+            var smsDeliveryStatus = !smsResult.Success
+                ? CommunicationStatus.Failed
+                : (smsResult.Provider.Contains("Simulated") || smsResult.Provider.Contains("Development")
+                    ? CommunicationStatus.Simulated
+                    : CommunicationStatus.Sent);
+
             var smsLog = new Notification
             {
                 UserId = userId,
@@ -129,7 +141,7 @@ public class NotificationService : INotificationService
                 IsRead = true,
                 Channel = CommunicationChannel.Sms,
                 EventType = eventType,
-                DeliveryStatus = smsResult.Success ? CommunicationStatus.Simulated : CommunicationStatus.Failed,
+                DeliveryStatus = smsDeliveryStatus,
                 ErrorMessage = smsResult.ErrorMessage,
                 SentAt = now
             };
@@ -176,11 +188,8 @@ public class NotificationService : INotificationService
 
     private static bool ShouldSendSmsForEvent(string eventType)
     {
-        return eventType switch
-        {
-            "OrderCreated" or "OutForDelivery" or "DeliveryFailed" or "OrderRescheduled" or "OrderDelivered" => true,
-            _ => false
-        };
+        // Dispatches on every status change lifecycle event
+        return true;
     }
 
     private static NotificationDto MapToDto(Notification n) => new()

@@ -67,6 +67,22 @@ public class CommunicationNotificationTests
         }
     }
 
+    private class LiveSuccessfulEmailProvider : IEmailNotificationProvider
+    {
+        public Task<CommunicationResult> SendEmailAsync(string recipientEmail, string subject, string body, string eventType, int? orderId = null)
+        {
+            return Task.FromResult(CommunicationResult.Ok("SmtpEmailProvider", "MSG-12345"));
+        }
+    }
+
+    private class LiveSuccessfulSmsProvider : ISmsNotificationProvider
+    {
+        public Task<CommunicationResult> SendSmsAsync(string recipientPhone, string message, string eventType, int? orderId = null)
+        {
+            return Task.FromResult(CommunicationResult.Ok("TwilioSmsProvider", "SM-67890"));
+        }
+    }
+
     [Fact]
     public async Task Test1_OrderCreated_TriggersMultiChannelNotifications()
     {
@@ -88,7 +104,6 @@ public class CommunicationNotificationTests
             OrderType = OrderType.B2C, PaymentType = PaymentType.Prepaid
         });
 
-        // Verify notifications saved across InApp, Email, Sms
         var logs = await db.Notifications.Where(n => n.OrderId == order.Id).ToListAsync();
         Assert.Contains(logs, n => n.Channel == CommunicationChannel.InApp && n.EventType == "OrderCreated");
         Assert.Contains(logs, n => n.Channel == CommunicationChannel.Email && n.EventType == "OrderCreated");
@@ -123,7 +138,7 @@ public class CommunicationNotificationTests
         await statusService.UpdateOrderStatusAsync(10, new UpdateOrderStatusRequest
         {
             Status = OrderStatus.OutForDelivery,
-            ActorId = 101, // Agent One
+            ActorId = 101,
             Notes = "Loaded onto van"
         });
 
@@ -154,7 +169,6 @@ public class CommunicationNotificationTests
     public async Task Test3_ExternalProviderFailure_DoesNotFail_OrderStatusUpdate()
     {
         var db = GetInMemoryDbContext(nameof(Test3_ExternalProviderFailure_DoesNotFail_OrderStatusUpdate));
-        // Use failing providers
         var failingEmail = new FailingEmailProvider();
         var failingSms = new FailingSmsProvider();
         var notifService = new NotificationService(db, failingEmail, failingSms);
@@ -175,7 +189,6 @@ public class CommunicationNotificationTests
         db.Orders.Add(order);
         await db.SaveChangesAsync();
 
-        // Status update should SUCCEED even though email/SMS providers threw exceptions
         var response = await statusService.UpdateOrderStatusAsync(20, new UpdateOrderStatusRequest
         {
             Status = OrderStatus.OutForDelivery,
@@ -185,27 +198,91 @@ public class CommunicationNotificationTests
 
         Assert.Equal(OrderStatus.OutForDelivery, response.CurrentStatus);
 
-        // Check that database records the failure status with error message
         var emailLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 20 && n.Channel == CommunicationChannel.Email);
         Assert.NotNull(emailLog);
         Assert.Equal(CommunicationStatus.Failed, emailLog.DeliveryStatus);
         Assert.Contains("Simulated external SMTP connection failure", emailLog.ErrorMessage);
+
+        var smsLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 20 && n.Channel == CommunicationChannel.Sms);
+        Assert.NotNull(smsLog);
+        Assert.Equal(CommunicationStatus.Failed, smsLog.DeliveryStatus);
+        Assert.Contains("Simulated Twilio gateway timeout", smsLog.ErrorMessage);
     }
 
     [Fact]
-    public async Task Test4_AdminCanInspect_OrderCommunicationLogs()
+    public async Task Test4_LiveProvider_RecordsSentStatus_And_SimulatedProvider_RecordsSimulatedStatus()
     {
-        var db = GetInMemoryDbContext(nameof(Test4_AdminCanInspect_OrderCommunicationLogs));
+        var db = GetInMemoryDbContext(nameof(Test4_LiveProvider_RecordsSentStatus_And_SimulatedProvider_RecordsSimulatedStatus));
+        // Real provider test
+        var liveEmail = new LiveSuccessfulEmailProvider();
+        var liveSms = new LiveSuccessfulSmsProvider();
+        var liveNotifService = new NotificationService(db, liveEmail, liveSms);
+
+        await liveNotifService.NotifyCustomerAsync(2, 30, "LM-LIVE-001", "OrderCreated", "Order Placed", "Your order was placed");
+
+        var emailSentLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 30 && n.Channel == CommunicationChannel.Email);
+        Assert.NotNull(emailSentLog);
+        Assert.Equal(CommunicationStatus.Sent, emailSentLog.DeliveryStatus);
+
+        var smsSentLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 30 && n.Channel == CommunicationChannel.Sms);
+        Assert.NotNull(smsSentLog);
+        Assert.Equal(CommunicationStatus.Sent, smsSentLog.DeliveryStatus);
+
+        // Simulation provider test
+        var devEmail = new DevelopmentEmailProvider(NullLogger<DevelopmentEmailProvider>.Instance);
+        var devSms = new DevelopmentSmsProvider(NullLogger<DevelopmentSmsProvider>.Instance);
+        var devNotifService = new NotificationService(db, devEmail, devSms);
+
+        await devNotifService.NotifyCustomerAsync(2, 31, "LM-DEV-001", "OrderCreated", "Order Placed", "Your order was placed");
+
+        var emailSimLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 31 && n.Channel == CommunicationChannel.Email);
+        Assert.NotNull(emailSimLog);
+        Assert.Equal(CommunicationStatus.Simulated, emailSimLog.DeliveryStatus);
+
+        var smsSimLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 31 && n.Channel == CommunicationChannel.Sms);
+        Assert.NotNull(smsSimLog);
+        Assert.Equal(CommunicationStatus.Simulated, smsSimLog.DeliveryStatus);
+    }
+
+    [Fact]
+    public async Task Test5_CustomerIsolation_CustomerOnlySeesOwnInAppNotifications()
+    {
+        var db = GetInMemoryDbContext(nameof(Test5_CustomerIsolation_CustomerOnlySeesOwnInAppNotifications));
+        var emailProvider = new DevelopmentEmailProvider(NullLogger<DevelopmentEmailProvider>.Instance);
+        var smsProvider = new DevelopmentSmsProvider(NullLogger<DevelopmentSmsProvider>.Instance);
+        var notifService = new NotificationService(db, emailProvider, smsProvider);
+
+        // Seed orders
+        db.Orders.AddRange(
+            new Order { Id = 1, TrackingNumber = "LM-ORDER-1", CustomerId = 2, PickupAreaId = 1, DropAreaId = 1 },
+            new Order { Id = 2, TrackingNumber = "LM-ORDER-2", CustomerId = 3, PickupAreaId = 1, DropAreaId = 1 }
+        );
+
+        // Seed notifications for User 2 (Alice) and User 3 (Bob)
+        db.Notifications.AddRange(
+            new Notification { Id = 101, UserId = 2, OrderId = 1, Title = "Alice Note 1", Channel = CommunicationChannel.InApp, SentAt = DateTime.UtcNow },
+            new Notification { Id = 102, UserId = 2, OrderId = 1, Title = "Alice Note 2", Channel = CommunicationChannel.InApp, SentAt = DateTime.UtcNow },
+            new Notification { Id = 103, UserId = 3, OrderId = 2, Title = "Bob Secret Note", Channel = CommunicationChannel.InApp, SentAt = DateTime.UtcNow }
+        );
+        await db.SaveChangesAsync();
+
+        var aliceNotifications = (await notifService.GetCustomerNotificationsAsync(2)).ToList();
+        Assert.Equal(2, aliceNotifications.Count);
+        Assert.All(aliceNotifications, n => Assert.Equal(2, n.UserId));
+        Assert.DoesNotContain(aliceNotifications, n => n.Title == "Bob Secret Note");
+    }
+
+    [Fact]
+    public async Task Test6_AdminCanInspect_OrderCommunicationLogs()
+    {
+        var db = GetInMemoryDbContext(nameof(Test6_AdminCanInspect_OrderCommunicationLogs));
         var emailProvider = new DevelopmentEmailProvider(NullLogger<DevelopmentEmailProvider>.Instance);
         var smsProvider = new DevelopmentSmsProvider(NullLogger<DevelopmentSmsProvider>.Instance);
         var notifService = new NotificationService(db, emailProvider, smsProvider);
 
         var controller = new NotificationsController(db, notifService);
 
-        // Seed Order
         db.Orders.Add(new Order { Id = 50, TrackingNumber = "LM-ORDER-50", CustomerId = 2, PickupAreaId = 1, DropAreaId = 1 });
-
-        // Seed communication log records
         db.Notifications.AddRange(
             new Notification { Id = 1, UserId = 2, OrderId = 50, Title = "InApp Note", Channel = CommunicationChannel.InApp, SentAt = DateTime.UtcNow },
             new Notification { Id = 2, UserId = 2, OrderId = 50, Title = "Email Note", Channel = CommunicationChannel.Email, SentAt = DateTime.UtcNow },
