@@ -503,6 +503,43 @@ The database is seeded with preset demo accounts for evaluation:
 
 ---
 
+### Multi-Channel Customer Communication
+DeliveryTracker includes a multi-channel notification subsystem supporting:
+1. **In-App Notification Center**: Real-time bell dropdown in the header with unread badge counter, direct order navigation, and read state marking.
+2. **Email Communication Channel**: Structured HTML email updates dispatched on critical lifecycle events (`OrderCreated`, `PickedUp`, `InTransit`, `OutForDelivery`, `DeliveryFailed`, `OrderRescheduled`, `AgentReassigned`, `OrderDelivered`).
+3. **SMS Communication Channel**: Urgent SMS notifications dispatched on high-priority delivery events (`OutForDelivery`, `DeliveryFailed`, `OrderRescheduled`, `OrderDelivered`).
+4. **Failure-Safe Error Isolation**: External provider failures or gateway timeouts never fail or roll back core delivery state machine transactions.
+5. **Operational Audit Visibility**: Administrators can inspect complete multi-channel communication audit logs for every order directly from the order detail interface.
+
+---
+
+# Configuration & Providers
+
+DeliveryTracker supports both safe simulated development mode and production SMTP / SMS integration.
+
+See `.env.example` for environment variable templates:
+```bash
+# Email Configuration
+NOTIFICATION_EMAIL_ENABLED=true
+NOTIFICATION_EMAIL_PROVIDER=Development # Options: Development, Smtp
+NOTIFICATION_EMAIL_FROM=notifications@deliverytracker.com
+
+# SMTP Settings (Required if NOTIFICATION_EMAIL_PROVIDER=Smtp)
+SMTP_HOST=smtp.mailtrap.io
+SMTP_PORT=587
+SMTP_USERNAME=your_smtp_username
+SMTP_PASSWORD=your_smtp_password
+
+# SMS Configuration
+NOTIFICATION_SMS_ENABLED=true
+NOTIFICATION_SMS_PROVIDER=Development # Options: Development, Twilio
+NOTIFICATION_SMS_FROM=+18005550199
+```
+
+When set to `Development`, the system logs and persists communication records with `DeliveryStatus = Simulated` without attempting external network calls or pretending that physical emails/SMS messages were delivered.
+
+---
+
 # Testing
 
 ### Automated Unit Tests (`dotnet test`)
@@ -511,7 +548,7 @@ Run the backend test suite:
 cd DeliveryTracker.Tests
 dotnet test
 ```
-All **55 unit tests** test pricing calculations, agent assignment, state transitions, failed recovery, and JWT authorization rules.
+All **83 automated tests** test pricing calculations, agent assignment, state transitions, failed recovery, admin configuration, admin order operations, and multi-channel communication failure-safety.
 
 ### Production Build Verification
 ```bash
@@ -526,12 +563,12 @@ npm run build
 To experience the full business lifecycle:
 
 1. **Login as Customer** (`customer@delivery.com` / `Customer@123`).
-2. **Book Delivery**: Select Colaba &rarr; Andheri, 25&times;15&times;10 cm, 3.5 kg, B2C + COD. Click **Calculate Quote** (₹250.00), then **Confirm Delivery**. Receive tracking number `LM-YYYYMMDD-XXXXXX`.
-3. **Login as Admin** (`admin@delivery.com` / `Admin@123`). Go to **Operations Console**, locate order, click **Auto Assign**. Agent 1 (`Raj Agent`) is assigned.
+2. **Book Delivery**: Select Colaba &rarr; Andheri, 25&times;15&times;10 cm, 3.5 kg, B2C + COD. Click **Calculate Quote** (₹250.00), then **Confirm Delivery**. Receive tracking number `LM-YYYYMMDD-XXXXXX`. In-app, Email, and SMS communication records are logged.
+3. **Login as Admin** (`admin@delivery.com` / `Admin@123`). Go to **Operations Console**, locate order, click **Auto Assign** or **Manual Assign**. Agent 1 (`Raj Agent`) is assigned.
 4. **Login as Agent 1** (`agent1@delivery.com` / `Agent@123`). Advance status `PickedUp` &rarr; `InTransit` &rarr; `OutForDelivery` &rarr; `Failed` (Notes: "Customer phone unreachable").
-5. **Login as Customer**: Open order detail. See `Failed` status. Click **Reschedule Delivery**, pick future date. Order updates to `Rescheduled` and auto-reassigns Agent 2 (`Vikram Agent`).
+5. **Login as Customer**: Open order detail. See `Failed` status and notification in notification center. Click **Reschedule Delivery**, pick future date. Order updates to `Rescheduled` and auto-reassigns Agent 2 (`Vikram Agent`).
 6. **Login as Agent 2** (`agent2@delivery.com` / `Agent@123`). Advance status `OutForDelivery` &rarr; `Delivered`.
-7. **Verify Complete Audit Trail**: Order timeline displays all 8 immutable status history events.
+7. **Verify Complete Audit Trail**: Order timeline displays all 8 immutable status history events, and Admin sees complete multi-channel dispatch logs.
 
 ---
 
@@ -541,13 +578,5 @@ To experience the full business lifecycle:
 - **EF Core Migrations**: Database schema controlled strictly via EF migrations (`Database.Migrate()`) rather than `EnsureCreated()`.
 - **JWT Claim Scoping**: `CustomerId` and `AgentId` derived from authenticated JWT claims (`sub`), preventing cross-customer data tampering.
 - **Immutable Status Audit Trail**: Status changes are recorded in append-only `OrderStatusHistory` table rather than updating inline strings.
+- **Failure-Safe Communication Abstraction**: `INotificationService` isolates provider calls inside try-catch boundaries, ensuring core operational transactions are never blocked by network latency or provider downtime.
 - **Operational UI Aesthetics**: Focused UI built with Vanilla CSS tokens, precise typography, dark slate palette, and zero generic marketing templates.
-
----
-
-# Future Improvements
-
-- Real-time WebSockets / SignalR delivery updates.
-- Interactive map visualization for agent live GPS tracking.
-- Webhook notifications for customer SMS / WhatsApp updates.
-- Dynamic route optimization for multi-stop delivery agents.

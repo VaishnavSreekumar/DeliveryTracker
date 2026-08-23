@@ -197,8 +197,41 @@ $$\text{Total Amount} = \text{Delivery Fee} + \text{COD Surcharge (if COD)}$$
 
 ---
 
-## 5. Test & Quality Strategy
+## 5. Multi-Channel Communication Architecture
 
-1. **Automated Unit & Controller Tests**: 69 automated xUnit tests in `DeliveryTracker.Tests` running against isolated in-memory SQLite contexts covering pricing calculations, state machine validity, Haversine agent ranking, atomic recovery workflows, authentication, order scoping, and notification security.
-2. **Integration Verification**: End-to-end Python test scripts verifying the full 8-step failure-recovery lifecycle on a live ASP.NET Core server.
+```text
+                                  ┌────────────────────────┐
+                                  │   Lifecycle Trigger    │
+                                  │ (Order / Status Event) │
+                                  └───────────┬────────────┘
+                                              │
+                                              ▼
+                                 ┌─────────────────────────┐
+                                 │   INotificationService  │
+                                 └────────────┬────────────┘
+                                              │
+                    ┌─────────────────────────┼─────────────────────────┐
+                    ▼                         ▼                         ▼
+          ┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+          │  In-App Channel   │     │   Email Channel   │     │    SMS Channel    │
+          └─────────┬─────────┘     └─────────┬─────────┘     └─────────┬─────────┘
+                    │                         │                         │
+                    ▼                         ▼                         ▼
+         ┌─────────────────────┐   ┌─────────────────────┐   ┌─────────────────────┐
+         │ Notifications Table │   │ IEmailNotification │   │  ISmsNotification   │
+         │   (Channel=InApp)   │   │      Provider       │   │      Provider       │
+         └─────────────────────┘   └──────────┬──────────┘   └──────────┬──────────┘
+                                              │                         │
+                                   ┌──────────┴──────────┐   ┌──────────┴──────────┐
+                                   ▼                     ▼   ▼                     ▼
+                             [Development]             [SMTP]  [Development]    [Twilio]
+```
+
+### Failure-Safe Provider Isolation
+All external email and SMS calls are encapsulated inside try-catch fault isolation boundaries. An external provider outage, rate limit, or invalid recipient address will never cause an order creation, status change, or rescheduling database transaction to fail or roll back. The failure status and error details are logged to the database with `DeliveryStatus = CommunicationStatus.Failed`.
+
+## 6. Test & Quality Strategy
+
+1. **Automated Unit & Controller Tests**: 83 automated xUnit tests in `DeliveryTracker.Tests` running against isolated in-memory contexts covering pricing calculations, state machine validity, Haversine agent ranking, atomic recovery workflows, authentication, order scoping, admin configuration, admin order operations, and multi-channel communication fault isolation.
+2. **Integration Verification**: End-to-end Python test scripts verifying the full failure-recovery and communication lifecycle on a live ASP.NET Core server.
 3. **Frontend Production Build**: Vite build compilation producing static distribution assets (`dist/`).

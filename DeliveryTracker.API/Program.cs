@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using DeliveryTracker.API.Data;
 using DeliveryTracker.API.Services;
+using DeliveryTracker.API.Services.Communication;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,6 +67,9 @@ builder.Services.AddCors(options =>
 
 // Register Services
 builder.Services.AddScoped<IPricingService, PricingService>();
+builder.Services.AddScoped<IEmailNotificationProvider, DeliveryTracker.API.Services.Communication.DevelopmentEmailProvider>();
+builder.Services.AddScoped<ISmsNotificationProvider, DeliveryTracker.API.Services.Communication.DevelopmentSmsProvider>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IAgentAssignmentService, AgentAssignmentService>();
 builder.Services.AddScoped<IOrderStatusService, OrderStatusService>();

@@ -10,11 +10,16 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
 {
     private readonly AppDbContext _context;
     private readonly IAgentAssignmentService _agentAssignmentService;
+    private readonly INotificationService? _notificationService;
 
-    public DeliveryRecoveryService(AppDbContext context, IAgentAssignmentService agentAssignmentService)
+    public DeliveryRecoveryService(
+        AppDbContext context,
+        IAgentAssignmentService agentAssignmentService,
+        INotificationService? notificationService = null)
     {
         _context = context;
         _agentAssignmentService = agentAssignmentService;
+        _notificationService = notificationService;
     }
 
     public async Task<RescheduleOrderResponse> RescheduleOrderAsync(int orderId, RescheduleOrderRequest request)
@@ -58,6 +63,28 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
         var previousStatus = order.Status;
         int? previousAgentId = order.AssignedAgentId;
         AssignedAgentDto? previousAgentDto = null;
+
+        if (previousAgentId.HasValue)
+        {
+            var prevAgent = await _context.Agents
+                .Include(a => a.User)
+                .Include(a => a.Zone)
+                .FirstOrDefaultAsync(a => a.Id == previousAgentId.Value);
+
+            if (prevAgent != null)
+            {
+                previousAgentDto = new AssignedAgentDto
+                {
+                    Id = prevAgent.Id,
+                    Name = prevAgent.User?.FullName ?? "Agent",
+                    Email = prevAgent.User?.Email ?? string.Empty,
+                    ZoneName = prevAgent.Zone?.Name ?? "Unknown Zone",
+                    DistanceKm = 0
+                };
+            }
+        }
+
+        var now = DateTime.UtcNow;
         AgentAssignmentResponse? newAssignmentResult = null;
 
         var executionStrategy = _context.Database.CreateExecutionStrategy();
@@ -67,61 +94,34 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
             using var transaction = await _context.Database.BeginTransactionAsync();
             try
             {
-                var now = DateTime.UtcNow;
-
-                // STEP 1 & 2: Release previous agent
+                // STEP 5: Release previous agent
                 if (previousAgentId.HasValue)
                 {
-                    var previousAgent = await _context.Agents
-                        .Include(a => a.User)
-                        .Include(a => a.Zone)
-                        .FirstOrDefaultAsync(a => a.Id == previousAgentId.Value);
-
-                    if (previousAgent != null)
+                    var prevAgent = await _context.Agents.FirstOrDefaultAsync(a => a.Id == previousAgentId.Value);
+                    if (prevAgent != null)
                     {
-                        previousAgent.IsAvailable = true; // Released!
-                        previousAgentDto = new AssignedAgentDto
-                        {
-                            Id = previousAgent.Id,
-                            Name = previousAgent.User?.FullName ?? "Agent",
-                            Email = previousAgent.User?.Email ?? string.Empty,
-                            ZoneName = previousAgent.Zone?.Name ?? "Unknown Zone"
-                        };
+                        prevAgent.IsAvailable = true;
                     }
                 }
 
-                // STEP 3: Clear assigned agent from order
-                order.AssignedAgentId = null;
-
-                // STEP 4: Update latest DeliveryAttempt with RescheduledDate
-                var latestAttempt = await _context.DeliveryAttempts
-                    .Where(d => d.OrderId == order.Id)
-                    .OrderByDescending(d => d.AttemptedAt)
-                    .FirstOrDefaultAsync();
-
-                if (latestAttempt != null)
-                {
-                    latestAttempt.RescheduledDate = request.RescheduledDate;
-                }
-
-                // STEP 5: Change order status to Rescheduled and persist the requested date
+                // STEP 6: Update order status to Rescheduled & set RescheduledDate
                 order.Status = OrderStatus.Rescheduled;
                 order.RescheduledDate = request.RescheduledDate;
+                order.AssignedAgentId = null;
                 order.UpdatedAt = now;
 
-                // STEP 6: Create OrderStatusHistory record
                 var historyEntry = new OrderStatusHistory
                 {
                     OrderId = order.Id,
                     Status = OrderStatus.Rescheduled,
                     ActorId = customer.Id,
-                    ActorRole = UserRole.Customer,
-                    Notes = request.Notes ?? $"Rescheduled for delivery on {request.RescheduledDate:yyyy-MM-dd}",
+                    ActorRole = customer.Role,
+                    Notes = $"Rescheduled for {request.RescheduledDate:yyyy-MM-dd}",
                     Timestamp = now
                 };
                 _context.OrderStatusHistories.Add(historyEntry);
 
-                // STEP 7: Create customer notification 1 (Reschedule confirmation)
+                // Create customer in-app notification 1 (Reschedule confirmation)
                 var notification1 = new Notification
                 {
                     UserId = customer.Id,
@@ -130,6 +130,9 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
                     RecipientEmail = customer.Email,
                     Message = $"Order {order.TrackingNumber} has been rescheduled for {request.RescheduledDate:yyyy-MM-dd}.",
                     IsRead = false,
+                    Channel = CommunicationChannel.InApp,
+                    EventType = "OrderRescheduled",
+                    DeliveryStatus = CommunicationStatus.Sent,
                     SentAt = now
                 };
                 _context.Notifications.Add(notification1);
@@ -139,7 +142,7 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
                 // STEP 8-11: Trigger Auto-Assignment excluding previous agent
                 newAssignmentResult = await _agentAssignmentService.AutoAssignAgentAsync(order.Id, excludeAgentId: previousAgentId);
 
-                // STEP 12: Create customer notification 2 (Reassignment confirmation)
+                // Create customer in-app notification 2 (Reassignment confirmation)
                 var notification2 = new Notification
                 {
                     UserId = customer.Id,
@@ -148,6 +151,9 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
                     RecipientEmail = customer.Email,
                     Message = $"Order {order.TrackingNumber} has been rescheduled and assigned to Agent {newAssignmentResult.AssignedAgent.Name}.",
                     IsRead = false,
+                    Channel = CommunicationChannel.InApp,
+                    EventType = "AgentReassigned",
+                    DeliveryStatus = CommunicationStatus.Sent,
                     SentAt = DateTime.UtcNow
                 };
                 _context.Notifications.Add(notification2);
@@ -159,7 +165,7 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
             {
                 await transaction.RollbackAsync();
 
-                // Fail-safe state restoration for non-relational or transaction-ignored DB contexts
+                // Fail-safe state restoration
                 order.Status = previousStatus;
                 order.AssignedAgentId = previousAgentId;
 
@@ -168,15 +174,34 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
                     var prevAgent = await _context.Agents.FirstOrDefaultAsync(a => a.Id == previousAgentId.Value);
                     if (prevAgent != null)
                     {
-                        prevAgent.IsAvailable = false; // Restore previous agent availability
+                        prevAgent.IsAvailable = false;
                     }
                 }
 
                 await _context.SaveChangesAsync();
-
                 throw;
             }
         });
+
+        // Trigger Multi-Channel Email/SMS notification via NotificationService (Failure safe)
+        if (_notificationService != null)
+        {
+            try
+            {
+                await _notificationService.NotifyCustomerAsync(
+                    customer.Id,
+                    order.Id,
+                    order.TrackingNumber,
+                    "OrderRescheduled",
+                    $"Delivery Rescheduled - {order.TrackingNumber}",
+                    $"Your delivery for order {order.TrackingNumber} has been rescheduled to {request.RescheduledDate:yyyy-MM-dd} and reassigned to Agent {newAssignmentResult?.AssignedAgent.Name}.",
+                    customer.Email);
+            }
+            catch
+            {
+                // Never fail recovery on notification issues
+            }
+        }
 
         return new RescheduleOrderResponse
         {

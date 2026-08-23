@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import type { Order } from '../types';
+import type { Order, AppNotification } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { apiClient } from '../api/apiClient';
 import { StatusBadge } from '../components/StatusBadge';
 import { TrackingTimeline } from '../components/TrackingTimeline';
 import { RescheduleModal } from '../components/RescheduleModal';
 import { AgentStatusModal } from '../components/AgentStatusModal';
-import { ArrowLeft, Copy, MapPin, Truck, Scale, DollarSign, Calendar, AlertTriangle, Check, RefreshCw } from 'lucide-react';
+import { ArrowLeft, Copy, MapPin, Truck, Scale, DollarSign, Calendar, AlertTriangle, Check, RefreshCw, Mail, MessageSquare, Bell } from 'lucide-react';
 
 interface OrderDetailPageProps {
   orderId: number;
@@ -16,6 +16,7 @@ interface OrderDetailPageProps {
 export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBack }) => {
   const { user } = useAuth();
   const [order, setOrder] = useState<Order | null>(null);
+  const [communications, setCommunications] = useState<AppNotification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -36,6 +37,15 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
     try {
       const data = await apiClient.get<Order>(`/orders/${orderId}`);
       setOrder(data);
+
+      if (user?.role === 'Admin') {
+        try {
+          const comms = await apiClient.get<AppNotification[]>(`/notifications/order/${orderId}/communications`);
+          setCommunications(comms);
+        } catch {
+          // ignore comm log failure
+        }
+      }
     } catch (err: any) {
       setError(err.message || `Failed to fetch order #${orderId}`);
     } finally {
@@ -279,6 +289,86 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
           <TrackingTimeline history={order.statusHistory || []} />
         </div>
       </div>
+
+      {/* Admin Multi-Channel Communication Audit Trail */}
+      {isAdmin && (
+        <div className="card">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
+            <h4 style={{ fontSize: '0.875rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--brand-primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Mail size={16} /> Multi-Channel Communication Activity Log ({communications.length})
+            </h4>
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>In-App • Email • SMS Dispatch Tracking</span>
+          </div>
+
+          {communications.length === 0 ? (
+            <div style={{ color: 'var(--text-muted)', fontSize: '0.8125rem', padding: '1rem 0', textAlign: 'center' }}>
+              No communication dispatches recorded for this order yet.
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8125rem' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--border-subtle)', textAlign: 'left', color: 'var(--text-muted)' }}>
+                    <th style={{ padding: '0.5rem' }}>Channel</th>
+                    <th style={{ padding: '0.5rem' }}>Event</th>
+                    <th style={{ padding: '0.5rem' }}>Recipient</th>
+                    <th style={{ padding: '0.5rem' }}>Status</th>
+                    <th style={{ padding: '0.5rem' }}>Message Preview</th>
+                    <th style={{ padding: '0.5rem' }}>Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {communications.map((c) => (
+                    <tr key={c.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td style={{ padding: '0.625rem 0.5rem', fontWeight: 600 }}>
+                        <span style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.375rem',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          backgroundColor: c.channel === 'Email' ? 'rgba(59, 130, 246, 0.15)' : c.channel === 'Sms' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(139, 92, 246, 0.15)',
+                          color: c.channel === 'Email' ? '#60a5fa' : c.channel === 'Sms' ? '#34d399' : '#a78bfa'
+                        }}>
+                          {c.channel === 'Email' && <Mail size={12} />}
+                          {c.channel === 'Sms' && <MessageSquare size={12} />}
+                          {c.channel === 'InApp' && <Bell size={12} />}
+                          {c.channel || 'InApp'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.5rem', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>
+                        {c.eventType || 'General'}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.5rem', color: 'var(--text-secondary)' }}>
+                        {c.channel === 'Sms' ? (c.recipientPhone || 'Customer Phone') : c.recipientEmail}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.5rem' }}>
+                        <span style={{
+                          padding: '0.15rem 0.4rem',
+                          borderRadius: '3px',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          backgroundColor: c.deliveryStatus === 'Failed' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+                          color: c.deliveryStatus === 'Failed' ? '#fb7185' : '#4ade80'
+                        }}>
+                          {c.deliveryStatus || 'Sent'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.625rem 0.5rem', maxWidth: '280px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: 'var(--text-secondary)' }} title={c.message}>
+                        {c.title}: {c.message}
+                      </td>
+                      <td style={{ padding: '0.625rem 0.5rem', color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        {new Date(c.sentAt).toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Modals */}
       {canReschedule && (

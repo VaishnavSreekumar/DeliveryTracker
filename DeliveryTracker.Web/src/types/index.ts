@@ -117,7 +117,12 @@ export interface AppNotification {
   title: string;
   message: string;
   recipientEmail: string;
+  recipientPhone?: string;
   isRead: boolean;
+  channel?: 'InApp' | 'Email' | 'Sms';
+  eventType?: string;
+  deliveryStatus?: 'Sent' | 'Simulated' | 'Failed';
+  errorMessage?: string;
   sentAt: string;
 }
 

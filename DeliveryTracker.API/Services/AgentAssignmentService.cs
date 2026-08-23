@@ -9,16 +9,19 @@ namespace DeliveryTracker.API.Services;
 public class AgentAssignmentService : IAgentAssignmentService
 {
     private readonly AppDbContext _context;
+    private readonly INotificationService? _notificationService;
 
-    public AgentAssignmentService(AppDbContext context)
+    public AgentAssignmentService(AppDbContext context, INotificationService? notificationService = null)
     {
         _context = context;
+        _notificationService = notificationService;
     }
 
     public async Task<AgentAssignmentResponse> AutoAssignAgentAsync(int orderId, int? excludeAgentId = null)
     {
         // STEP 1: Load Order
         var order = await _context.Orders
+            .Include(o => o.Customer)
             .Include(o => o.PickupArea!).ThenInclude(a => a.Zone)
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
@@ -89,6 +92,26 @@ public class AgentAssignmentService : IAgentAssignmentService
 
         await _context.SaveChangesAsync();
 
+        // Trigger Notification
+        if (_notificationService != null)
+        {
+            try
+            {
+                await _notificationService.NotifyCustomerAsync(
+                    order.CustomerId,
+                    order.Id,
+                    order.TrackingNumber,
+                    "AgentAssigned",
+                    $"Agent Assigned - {order.TrackingNumber}",
+                    $"Delivery Agent {selectedAgent.User?.FullName ?? selectedAgent.Id.ToString()} has been assigned to your order.",
+                    order.Customer?.Email);
+            }
+            catch
+            {
+                // Failure safe
+            }
+        }
+
         return new AgentAssignmentResponse
         {
             OrderId = order.Id,
@@ -108,6 +131,7 @@ public class AgentAssignmentService : IAgentAssignmentService
     public async Task<AgentAssignmentResponse> ManualAssignAgentAsync(int orderId, int agentId, int adminUserId)
     {
         var order = await _context.Orders
+            .Include(o => o.Customer)
             .Include(o => o.PickupArea!).ThenInclude(a => a.Zone)
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
@@ -156,6 +180,26 @@ public class AgentAssignmentService : IAgentAssignmentService
         _context.OrderStatusHistories.Add(history);
 
         await _context.SaveChangesAsync();
+
+        // Trigger Notification
+        if (_notificationService != null)
+        {
+            try
+            {
+                await _notificationService.NotifyCustomerAsync(
+                    order.CustomerId,
+                    order.Id,
+                    order.TrackingNumber,
+                    "AgentAssigned",
+                    $"Agent Assigned - {order.TrackingNumber}",
+                    $"Delivery Agent {agent.User?.FullName ?? agent.Id.ToString()} was assigned to your order by Operations.",
+                    order.Customer?.Email);
+            }
+            catch
+            {
+                // Failure safe
+            }
+        }
 
         return new AgentAssignmentResponse
         {

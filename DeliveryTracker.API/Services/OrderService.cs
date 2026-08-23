@@ -10,11 +10,16 @@ public class OrderService : IOrderService
 {
     private readonly AppDbContext _context;
     private readonly IPricingService _pricingService;
+    private readonly INotificationService? _notificationService;
 
-    public OrderService(AppDbContext context, IPricingService pricingService)
+    public OrderService(
+        AppDbContext context,
+        IPricingService pricingService,
+        INotificationService? notificationService = null)
     {
         _context = context;
         _pricingService = pricingService;
+        _notificationService = notificationService;
     }
 
     public async Task<OrderResponse> CreateOrderAsync(CreateOrderRequest request, int? creatorUserId = null, UserRole? creatorRole = null)
@@ -137,7 +142,27 @@ public class OrderService : IOrderService
             }
         });
 
-        // 8. Return complete OrderResponse
+        // 8. Trigger Multi-Channel Customer Notification (Failure-safe)
+        if (_notificationService != null)
+        {
+            try
+            {
+                await _notificationService.NotifyCustomerAsync(
+                    order.CustomerId,
+                    order.Id,
+                    order.TrackingNumber,
+                    "OrderCreated",
+                    $"Order Booked - {order.TrackingNumber}",
+                    $"Your delivery order from {pickupArea.Name} to {dropArea.Name} has been booked successfully. Total: ₹{order.TotalAmount:F2}.",
+                    customer.Email);
+            }
+            catch
+            {
+                // Never fail order creation on notification issues
+            }
+        }
+
+        // 9. Return complete OrderResponse
         return await GetOrderByIdAsync(order.Id) 
             ?? throw new InvalidOperationException("Failed to retrieve order after creation.");
     }

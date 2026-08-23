@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using DeliveryTracker.API.Data;
 using DeliveryTracker.API.DTOs;
 using DeliveryTracker.API.Enums;
+using DeliveryTracker.API.Services;
 
 namespace DeliveryTracker.API.Controllers;
 
@@ -14,14 +15,16 @@ namespace DeliveryTracker.API.Controllers;
 public class NotificationsController : ControllerBase
 {
     private readonly AppDbContext _context;
+    private readonly INotificationService? _notificationService;
 
-    public NotificationsController(AppDbContext context)
+    public NotificationsController(AppDbContext context, INotificationService? notificationService = null)
     {
         _context = context;
+        _notificationService = notificationService;
     }
 
     /// <summary>
-    /// Retrieves notifications for the authenticated user.
+    /// Retrieves in-app notifications for the authenticated user.
     /// Customers and Agents can only view their own notifications.
     /// Admins can view all notifications.
     /// </summary>
@@ -33,6 +36,7 @@ public class NotificationsController : ControllerBase
 
         var query = _context.Notifications
             .Include(n => n.Order)
+            .Where(n => n.Channel == CommunicationChannel.InApp)
             .AsQueryable();
 
         if (userRole != UserRole.Admin)
@@ -51,7 +55,12 @@ public class NotificationsController : ControllerBase
                 Title = n.Title,
                 Message = n.Message,
                 RecipientEmail = n.RecipientEmail,
+                RecipientPhone = n.RecipientPhone,
                 IsRead = n.IsRead,
+                Channel = n.Channel.ToString(),
+                EventType = n.EventType,
+                DeliveryStatus = n.DeliveryStatus.ToString(),
+                ErrorMessage = n.ErrorMessage,
                 SentAt = n.SentAt
             })
             .ToListAsync();
@@ -60,8 +69,7 @@ public class NotificationsController : ControllerBase
     }
 
     /// <summary>
-    /// Marks a notification as read.
-    /// Users can only mark their own notifications as read unless Admin.
+    /// Marks an in-app notification as read.
     /// </summary>
     [HttpPatch("{id:int}/read")]
     public async Task<ActionResult<NotificationDto>> MarkAsRead(int id)
@@ -95,9 +103,53 @@ public class NotificationsController : ControllerBase
             Title = notification.Title,
             Message = notification.Message,
             RecipientEmail = notification.RecipientEmail,
+            RecipientPhone = notification.RecipientPhone,
             IsRead = notification.IsRead,
+            Channel = notification.Channel.ToString(),
+            EventType = notification.EventType,
+            DeliveryStatus = notification.DeliveryStatus.ToString(),
+            ErrorMessage = notification.ErrorMessage,
             SentAt = notification.SentAt
         });
+    }
+
+    /// <summary>
+    /// Retrieves all multi-channel communication logs (In-App, Email, SMS) for an order (Admin only).
+    /// </summary>
+    [HttpGet("order/{orderId:int}/communications")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<IEnumerable<NotificationDto>>> GetOrderCommunications(int orderId)
+    {
+        if (_notificationService != null)
+        {
+            var logs = await _notificationService.GetOrderCommunicationLogsAsync(orderId);
+            return Ok(logs);
+        }
+
+        var directLogs = await _context.Notifications
+            .Include(n => n.Order)
+            .Where(n => n.OrderId == orderId)
+            .OrderBy(n => n.SentAt)
+            .Select(n => new NotificationDto
+            {
+                Id = n.Id,
+                UserId = n.UserId,
+                OrderId = n.OrderId,
+                OrderTrackingNumber = n.Order != null ? n.Order.TrackingNumber : string.Empty,
+                Title = n.Title,
+                Message = n.Message,
+                RecipientEmail = n.RecipientEmail,
+                RecipientPhone = n.RecipientPhone,
+                IsRead = n.IsRead,
+                Channel = n.Channel.ToString(),
+                EventType = n.EventType,
+                DeliveryStatus = n.DeliveryStatus.ToString(),
+                ErrorMessage = n.ErrorMessage,
+                SentAt = n.SentAt
+            })
+            .ToListAsync();
+
+        return Ok(directLogs);
     }
 
     private (int? userId, UserRole? role) GetAuthenticatedUser()

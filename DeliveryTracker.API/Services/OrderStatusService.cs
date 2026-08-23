@@ -9,16 +9,19 @@ namespace DeliveryTracker.API.Services;
 public class OrderStatusService : IOrderStatusService
 {
     private readonly AppDbContext _context;
+    private readonly INotificationService? _notificationService;
 
-    public OrderStatusService(AppDbContext context)
+    public OrderStatusService(AppDbContext context, INotificationService? notificationService = null)
     {
         _context = context;
+        _notificationService = notificationService;
     }
 
     public async Task<OrderStatusUpdateResponse> UpdateOrderStatusAsync(int orderId, UpdateOrderStatusRequest request)
     {
         // 1. Load Order
         var order = await _context.Orders
+            .Include(o => o.Customer)
             .FirstOrDefaultAsync(o => o.Id == orderId);
 
         if (order == null)
@@ -81,9 +84,8 @@ public class OrderStatusService : IOrderStatusService
             try
             {
                 _context.OrderStatusHistories.Add(historyEntry);
-                _context.Orders.Update(order);
 
-                // If Status is Failed, record DeliveryAttempt & Notification automatically
+                // If Status is Failed, record DeliveryAttempt & in-app notification & release agent
                 if (request.Status == OrderStatus.Failed)
                 {
                     int previousAttempts = await _context.DeliveryAttempts.CountAsync(d => d.OrderId == order.Id);
@@ -100,18 +102,26 @@ public class OrderStatusService : IOrderStatusService
                     };
                     _context.DeliveryAttempts.Add(deliveryAttempt);
 
-                    var customerUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == order.CustomerId);
-                    var notification = new Notification
+                    var failureNotification = new Notification
                     {
                         UserId = order.CustomerId,
                         OrderId = order.Id,
                         Title = $"Delivery Attempt Failed - {order.TrackingNumber}",
-                        RecipientEmail = customerUser?.Email ?? "customer@delivery.com",
+                        RecipientEmail = order.Customer?.Email ?? "customer@delivery.com",
                         Message = $"Delivery attempt failed for order {order.TrackingNumber}. Reason: {request.Notes ?? "Delivery failed"}. Please reschedule your delivery.",
                         IsRead = false,
+                        Channel = CommunicationChannel.InApp,
+                        EventType = "DeliveryFailed",
+                        DeliveryStatus = CommunicationStatus.Sent,
                         SentAt = now
                     };
-                    _context.Notifications.Add(notification);
+                    _context.Notifications.Add(failureNotification);
+
+                    if (order.AssignedAgentId.HasValue)
+                    {
+                        var agent = await _context.Agents.FindAsync(order.AssignedAgentId.Value);
+                        if (agent != null) agent.IsAvailable = true;
+                    }
                 }
 
                 await _context.SaveChangesAsync();
@@ -123,6 +133,27 @@ public class OrderStatusService : IOrderStatusService
                 throw;
             }
         });
+
+        // 8. Trigger Multi-Channel Customer Notification (Failure-safe)
+        if (_notificationService != null)
+        {
+            try
+            {
+                var (eventType, title, msg) = GetNotificationContentForTransition(order.TrackingNumber, request.Status, request.Notes);
+                await _notificationService.NotifyCustomerAsync(
+                    order.CustomerId,
+                    order.Id,
+                    order.TrackingNumber,
+                    eventType,
+                    title,
+                    msg,
+                    order.Customer?.Email);
+            }
+            catch
+            {
+                // Never fail status transition due to notification issues
+            }
+        }
 
         return new OrderStatusUpdateResponse
         {
@@ -143,13 +174,12 @@ public class OrderStatusService : IOrderStatusService
         };
     }
 
-    /// <summary>
-    /// Privileged Admin Status Override.
-    /// Allows Admin to set any status with an explicit mandatory reason and immutable audit record.
-    /// </summary>
     public async Task<OrderStatusUpdateResponse> OverrideOrderStatusAsync(int orderId, AdminOverrideStatusRequest request, int adminUserId)
     {
-        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId);
+        var order = await _context.Orders
+            .Include(o => o.Customer)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+
         if (order == null)
         {
             throw new KeyNotFoundException($"Order with ID {orderId} not found.");
@@ -203,7 +233,7 @@ public class OrderStatusService : IOrderStatusService
                     }
                 }
 
-                // If overridden to Failed, record attempt & notification
+                // If overridden to Failed, record attempt
                 if (request.Status == OrderStatus.Failed)
                 {
                     int previousAttempts = await _context.DeliveryAttempts.CountAsync(d => d.OrderId == order.Id);
@@ -219,19 +249,6 @@ public class OrderStatusService : IOrderStatusService
                         AttemptedAt = now
                     };
                     _context.DeliveryAttempts.Add(deliveryAttempt);
-
-                    var customerUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == order.CustomerId);
-                    var notification = new Notification
-                    {
-                        UserId = order.CustomerId,
-                        OrderId = order.Id,
-                        Title = $"Delivery Status Updated by Admin - {order.TrackingNumber}",
-                        RecipientEmail = customerUser?.Email ?? "customer@delivery.com",
-                        Message = $"Order {order.TrackingNumber} status set to Failed by Administrator. Reason: {request.Reason}",
-                        IsRead = false,
-                        SentAt = now
-                    };
-                    _context.Notifications.Add(notification);
                 }
 
                 await _context.SaveChangesAsync();
@@ -243,6 +260,26 @@ public class OrderStatusService : IOrderStatusService
                 throw;
             }
         });
+
+        // Trigger notification for Admin Override
+        if (_notificationService != null)
+        {
+            try
+            {
+                await _notificationService.NotifyCustomerAsync(
+                    order.CustomerId,
+                    order.Id,
+                    order.TrackingNumber,
+                    "AdminStatusOverride",
+                    $"Status Updated by Admin - {order.TrackingNumber}",
+                    $"Order status was updated to {request.Status} by Administrator. Reason: {request.Reason}",
+                    order.Customer?.Email);
+            }
+            catch
+            {
+                // Never fail override due to notification issues
+            }
+        }
 
         return new OrderStatusUpdateResponse
         {
@@ -263,9 +300,43 @@ public class OrderStatusService : IOrderStatusService
         };
     }
 
-    /// <summary>
-    /// Formal state machine transition rules for standard agent lifecycle.
-    /// </summary>
+    private static (string eventType, string title, string message) GetNotificationContentForTransition(string trackingNumber, OrderStatus nextStatus, string? notes)
+    {
+        return nextStatus switch
+        {
+            OrderStatus.PickedUp => (
+                "PickedUp",
+                $"Order Picked Up - {trackingNumber}",
+                $"Your package for order {trackingNumber} has been picked up and is in preparation."
+            ),
+            OrderStatus.InTransit => (
+                "InTransit",
+                $"Package In Transit - {trackingNumber}",
+                $"Your package for order {trackingNumber} is currently in transit between delivery facilities."
+            ),
+            OrderStatus.OutForDelivery => (
+                "OutForDelivery",
+                $"Out For Delivery - {trackingNumber}",
+                $"Your package for order {trackingNumber} is out for delivery today. Please ensure recipient availability."
+            ),
+            OrderStatus.Delivered => (
+                "OrderDelivered",
+                $"Package Delivered - {trackingNumber}",
+                $"Your package for order {trackingNumber} has been successfully delivered. Thank you for using DeliveryTracker!"
+            ),
+            OrderStatus.Failed => (
+                "DeliveryFailed",
+                $"Delivery Attempt Failed - {trackingNumber}",
+                $"Delivery attempt failed for order {trackingNumber}. Reason: {notes ?? "Delivery failed"}. Please reschedule your delivery."
+            ),
+            _ => (
+                "StatusUpdate",
+                $"Order Status Update - {trackingNumber}",
+                $"Order {trackingNumber} status changed to {nextStatus}."
+            )
+        };
+    }
+
     private static bool IsValidTransition(OrderStatus current, OrderStatus next)
     {
         return (current, next) switch
