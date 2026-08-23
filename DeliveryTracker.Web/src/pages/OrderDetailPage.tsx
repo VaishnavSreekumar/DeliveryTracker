@@ -146,6 +146,12 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
             <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase' }}>Last Updated</span>
             <strong style={{ color: 'var(--text-primary)' }}>{new Date(order.updatedAt).toLocaleString()}</strong>
           </div>
+          {order.rescheduledDate && (
+            <div>
+              <span style={{ color: 'var(--text-muted)', display: 'block', fontSize: '0.7rem', textTransform: 'uppercase' }}>Rescheduled For</span>
+              <strong style={{ color: '#fbbf24' }}>{new Date(order.rescheduledDate).toLocaleDateString(undefined, { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric' })}</strong>
+            </div>
+          )}
         </div>
       </div>
 

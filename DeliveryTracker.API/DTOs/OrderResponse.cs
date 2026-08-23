@@ -39,6 +39,7 @@ public class OrderResponse
 
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+    public DateTime? RescheduledDate { get; set; }
 
     public List<OrderStatusHistoryDto> StatusHistory { get; set; } = new();
 }

@@ -104,8 +104,9 @@ public class DeliveryRecoveryService : IDeliveryRecoveryService
                     latestAttempt.RescheduledDate = request.RescheduledDate;
                 }
 
-                // STEP 5: Change order status to Rescheduled
+                // STEP 5: Change order status to Rescheduled and persist the requested date
                 order.Status = OrderStatus.Rescheduled;
+                order.RescheduledDate = request.RescheduledDate;
                 order.UpdatedAt = now;
 
                 // STEP 6: Create OrderStatusHistory record

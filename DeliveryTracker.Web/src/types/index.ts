@@ -75,6 +75,7 @@ export interface Order {
   assignedAgentName?: string;
   createdAt: string;
   updatedAt: string;
+  rescheduledDate?: string;
   statusHistory: OrderStatusHistory[];
 }
 

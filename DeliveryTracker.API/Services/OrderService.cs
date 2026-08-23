@@ -184,6 +184,7 @@ public class OrderService : IOrderService
 
             CreatedAt = order.CreatedAt,
             UpdatedAt = order.UpdatedAt,
+            RescheduledDate = order.RescheduledDate,
 
             StatusHistory = order.StatusHistory
                 .OrderBy(h => h.Timestamp)

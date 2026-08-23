@@ -454,4 +454,70 @@ public class DeliveryRecoveryServiceTests
         var agent1 = await db.Agents.FindAsync(1);
         Assert.False(agent1!.IsAvailable); // Retains original state
     }
+
+    [Fact]
+    public async Task Test13_RescheduledDate_IsPersistedOnOrderEntity()
+    {
+        // Arrange
+        var db = GetInMemoryDbContext(nameof(Test13_RescheduledDate_IsPersistedOnOrderEntity));
+        CreateOutForDeliveryOrder(db, assignedAgentId: 1);
+        var statusService = new OrderStatusService(db);
+        await statusService.UpdateOrderStatusAsync(1, new UpdateOrderStatusRequest { Status = OrderStatus.Failed, ActorId = 101, Notes = "Failed" });
+
+        var assignmentService = new AgentAssignmentService(db);
+        var recoveryService = new DeliveryRecoveryService(db, assignmentService);
+
+        var expectedDate = DateTime.UtcNow.AddDays(3).Date;
+
+        // Act
+        await recoveryService.RescheduleOrderAsync(1, new RescheduleOrderRequest
+        {
+            CustomerId = 2,
+            RescheduledDate = expectedDate
+        });
+
+        // Assert: RescheduledDate is persisted on the Order entity in the database
+        var order = await db.Orders.FindAsync(1);
+        Assert.NotNull(order);
+        Assert.NotNull(order.RescheduledDate);
+        Assert.Equal(expectedDate, order.RescheduledDate!.Value.Date);
+    }
+
+    [Fact]
+    public async Task Test14_RescheduledDate_ResponseContainsDate()
+    {
+        // Arrange
+        var db = GetInMemoryDbContext(nameof(Test14_RescheduledDate_ResponseContainsDate));
+        CreateOutForDeliveryOrder(db, assignedAgentId: 1);
+        var statusService = new OrderStatusService(db);
+        await statusService.UpdateOrderStatusAsync(1, new UpdateOrderStatusRequest { Status = OrderStatus.Failed, ActorId = 101, Notes = "Failed" });
+
+        var assignmentService = new AgentAssignmentService(db);
+        var recoveryService = new DeliveryRecoveryService(db, assignmentService);
+
+        var futureDate = DateTime.UtcNow.AddDays(5);
+
+        // Act
+        var response = await recoveryService.RescheduleOrderAsync(1, new RescheduleOrderRequest
+        {
+            CustomerId = 2,
+            RescheduledDate = futureDate
+        });
+
+        // Assert: The RescheduleOrderResponse carries back the requested date
+        Assert.Equal(futureDate.Date, response.RescheduledDate.Date);
+    }
+
+    [Fact]
+    public async Task Test15_RescheduledDate_NullOnNonRescheduledOrder()
+    {
+        // Arrange: An OutForDelivery order that has never been rescheduled
+        var db = GetInMemoryDbContext(nameof(Test15_RescheduledDate_NullOnNonRescheduledOrder));
+        CreateOutForDeliveryOrder(db, assignedAgentId: 1);
+
+        // Assert: RescheduledDate is null on an order that has never been rescheduled
+        var order = await db.Orders.FindAsync(1);
+        Assert.NotNull(order);
+        Assert.Null(order.RescheduledDate);
+    }
 }
