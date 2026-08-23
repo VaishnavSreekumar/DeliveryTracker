@@ -30,6 +30,8 @@ The main focus of the project is not just CRUD operations, but implementing the 
 
 - [Overview](#overview)
 - [Key Features](#key-features)
+- [Screenshots](#screenshots)
+- [Engineering Problems Solved](#engineering-problems-solved)
 - [System Architecture](#system-architecture)
 - [Order Lifecycle](#order-lifecycle)
 - [Failed Delivery Recovery](#failed-delivery-recovery)
@@ -106,6 +108,31 @@ Every status transition is permanently recorded in an immutable tracking history
 - Password hashing via `PasswordHasher<User>`
 - Service-based architecture with transactional rollback fail-safes
 - Append-only immutable status history audit trail
+
+---
+
+# Screenshots
+
+| Login | Create Delivery |
+| :---: | :---: |
+| ![Login Page](docs/screenshots/01_login.png) | ![Create Delivery](docs/screenshots/02_create_delivery.png) |
+
+| Order Tracking Timeline | Admin Operations Console |
+| :---: | :---: |
+| ![Order Detail](docs/screenshots/03_order_detail.png) | ![Admin Operations](docs/screenshots/04_admin_operations.png) |
+
+---
+
+# Engineering Problems Solved
+
+This project was built to demonstrate correct implementation of backend business rules, not just CRUD endpoints. The following problems required deliberate engineering decisions:
+
+- **Pricing consistency**: Price preview (`POST /api/orders/calculate-price`) and order creation both call the same `PricingService`, so a customer can never be charged a different amount than what was quoted.
+- **Assignment correctness**: Agents are filtered by `IsAvailable == true`, ranked by same-zone preference, then ordered by Haversine distance from the pickup area. This guarantees the nearest available agent is always selected.
+- **Workflow integrity**: Invalid delivery status jumps (e.g. `Created → Delivered`) are rejected at the service layer by a validated transition table. The API never silently accepts illegal transitions.
+- **Auditability**: Every status change appends a new immutable row to `OrderStatusHistories` with actor identity, actor role, notes, and timestamp. Status is never overwritten.
+- **Failure recovery safety**: When a delivery is rescheduled, the previous agent is released (`IsAvailable = true`) and excluded from reassignment by `excludeAgentId`. This prevents the same failed agent from being reassigned to the same order.
+- **Authorization boundaries**: `CustomerId` and `AgentId` are derived exclusively from authenticated JWT claims (`sub`), never from client-supplied request parameters. A customer cannot access another customer's orders, and an agent cannot update a delivery assigned to a different agent.
 
 ---
 
@@ -242,11 +269,15 @@ The pricing engine calculates shipping costs dynamically based on database-drive
   $$\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$$
 
 ### Rate Card Lookup
-- Matches `OrderType` (`B2C` vs `B2B`) and Zone Relation (`IntraZone` vs `InterZone`).
-- Applies base rate per kg (`RatePerKg`) and base delivery fee (`MinFee`).
-- If `PaymentType == COD`, adds configured `CodSurcharge` percentage (e.g. 5%).
+- Fetches a `RateCard` row matching the order's `OrderType` (`B2C` or `B2B`).
+- Determines the applicable rate: **IntraZone** (`IntraZoneRatePerKg`) when pickup and drop areas share the same zone, **InterZone** (`InterZoneRatePerKg`) otherwise.
+- If `PaymentType == COD`, adds a fixed `CODSurcharge` amount configured in the `RateCard` (e.g. ₹40.00 flat).
 
-$$\text{Total Amount} = (\text{Chargeable Weight} \times \text{RatePerKg}) + \text{CodSurcharge}$$
+$$\text{Delivery Fee} = \text{Chargeable Weight} \times \text{RatePerKg}$$
+
+$$\text{Total Amount} = \text{Delivery Fee} + \text{CODSurcharge}$$
+
+The price calculation is shared between the `/calculate-price` endpoint and order creation, ensuring the customer is always charged the same amount that was quoted.
 
 ---
 
@@ -267,16 +298,88 @@ The intelligent agent assignment algorithm operates via `AgentAssignmentService`
 
 The database schema is managed via Entity Framework Core migrations on SQLite (`delivery.db`).
 
-### Schema Overview
-- `Users`: `Id`, `FullName`, `Email`, `PasswordHash`, `Role` (`Customer`, `Agent`, `Admin`).
-- `Zones`: `Id`, `Name`, `Code`.
-- `Areas`: `Id`, `Name`, `Code`, `ZoneId`, `Latitude`, `Longitude`.
-- `RateCards`: `Id`, `OrderType`, `IsIntraZone`, `BaseRatePerKg`, `MinFee`, `CodSurchargePercent`.
-- `Agents`: `Id`, `UserId`, `Name`, `Phone`, `CurrentAreaId`, `IsAvailable`.
-- `Orders`: `Id`, `TrackingNumber`, `CustomerId`, `PickupAreaId`, `DropAreaId`, `ActualWeight`, `VolumetricWeight`, `ChargeableWeight`, `OrderType`, `PaymentType`, `DeliveryFee`, `CodSurcharge`, `TotalAmount`, `Status`, `AssignedAgentId`, `RescheduledDate`, `CreatedAt`, `UpdatedAt`.
-- `OrderStatusHistories`: `Id`, `OrderId`, `Status`, `ActorId`, `ActorRole`, `Notes`, `Timestamp`.
-- `DeliveryAttempts`: `Id`, `OrderId`, `AgentId`, `AttemptNumber`, `AttemptTime`, `Reason`, `IsSuccessful`.
-- `Notifications`: `Id`, `UserId`, `OrderId`, `Title`, `Message`, `CreatedAt`, `IsRead`.
+```mermaid
+erDiagram
+    USERS {
+        int Id PK
+        string FullName
+        string Email
+        string PasswordHash
+        string Role
+    }
+    ZONES {
+        int Id PK
+        string Name
+        string Code
+    }
+    AREAS {
+        int Id PK
+        string Name
+        string Code
+        int ZoneId FK
+        float Latitude
+        float Longitude
+    }
+    RATE_CARDS {
+        int Id PK
+        string OrderType
+        decimal IntraZoneRatePerKg
+        decimal InterZoneRatePerKg
+        decimal CODSurcharge
+    }
+    AGENTS {
+        int Id PK
+        int UserId FK
+        bool IsAvailable
+        int ZoneId FK
+    }
+    ORDERS {
+        int Id PK
+        string TrackingNumber
+        int CustomerId FK
+        int AssignedAgentId FK
+        int PickupAreaId FK
+        int DropAreaId FK
+        decimal TotalAmount
+        string Status
+        string OrderType
+        string PaymentType
+    }
+    ORDER_STATUS_HISTORIES {
+        int Id PK
+        int OrderId FK
+        string Status
+        int ActorId
+        string ActorRole
+        string Notes
+        datetime Timestamp
+    }
+    DELIVERY_ATTEMPTS {
+        int Id PK
+        int OrderId FK
+        int AgentId FK
+        int AttemptNumber
+        string Reason
+    }
+    NOTIFICATIONS {
+        int Id PK
+        int UserId FK
+        int OrderId FK
+        string Title
+        string Message
+    }
+
+    USERS ||--o| AGENTS : "is"
+    USERS ||--o{ ORDERS : "places"
+    ZONES ||--o{ AREAS : "contains"
+    ZONES ||--o{ AGENTS : "serves"
+    AREAS ||--o{ ORDERS : "pickup"
+    AREAS ||--o{ ORDERS : "dropoff"
+    AGENTS ||--o{ ORDERS : "assigned"
+    ORDERS ||--o{ ORDER_STATUS_HISTORIES : "records"
+    ORDERS ||--o{ DELIVERY_ATTEMPTS : "attempts"
+    ORDERS ||--o{ NOTIFICATIONS : "triggers"
+```
 
 ---
 
