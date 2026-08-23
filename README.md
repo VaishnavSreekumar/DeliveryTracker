@@ -26,8 +26,7 @@ The main focus of the project is not just CRUD operations, but implementing the 
 
 ---
 
-## Table of Contents
-
+- [Canonical Documentation Deliverables](#canonical-documentation-deliverables)
 - [Overview](#overview)
 - [Key Features](#key-features)
 - [Screenshots](#screenshots)
@@ -49,6 +48,19 @@ The main focus of the project is not just CRUD operations, but implementing the 
 - [End-to-End Workflow](#end-to-end-workflow)
 - [Design Decisions](#design-decisions)
 - [Future Improvements](#future-improvements)
+
+---
+
+## Canonical Documentation Deliverables
+
+| Document | Purpose & Description |
+| :--- | :--- |
+| **[System Design Document](docs/SYSTEM_DESIGN.md)** | **597 words** (strictly $\le 800$ words) technical architecture write-up covering dynamic pricing, dispatching, state machine, and resilience. |
+| **[Pricing Engine & Rate Cards Guide](docs/PRICING_GUIDE.md)** | Volumetric weight formula ($\frac{L \times W \times H}{5000}$), B2B/B2C intra/inter matrices, and COD surcharges. |
+| **[REST API Reference](docs/API_REFERENCE.md)** | Complete endpoint specifications, payload schemas, query filters, and JWT RBAC authorization policies. |
+| **[Database Schema & Data Dictionary](docs/DATABASE_SCHEMA.md)** | Complete 9-table schema, foreign keys, enums, indexes, and immutable audit trail. |
+| **[Architecture & Security](docs/ARCHITECTURE.md)** | Decoupled client-server architecture, fault isolation, and threat modeling. |
+| **[Assignment Traceability Matrix](docs/ASSIGNMENT_TRACEABILITY.md)** | 100% requirements mapping (REQ-01 through REQ-18) and automated test suite coverage. |
 
 ---
 
