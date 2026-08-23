@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using DeliveryTracker.API.Data;
 using DeliveryTracker.API.DTOs;
 using DeliveryTracker.API.Entities;
+using DeliveryTracker.API.Enums;
 
 namespace DeliveryTracker.API.Services;
 
@@ -101,6 +102,74 @@ public class AgentAssignmentService : IAgentAssignmentService
                 DistanceKm = selected.DistanceKm
             },
             Message = "Agent assigned successfully."
+        };
+    }
+
+    public async Task<AgentAssignmentResponse> ManualAssignAgentAsync(int orderId, int agentId, int adminUserId)
+    {
+        var order = await _context.Orders
+            .Include(o => o.PickupArea!).ThenInclude(a => a.Zone)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+
+        if (order == null)
+        {
+            throw new KeyNotFoundException($"Order with ID {orderId} not found.");
+        }
+
+        var agent = await _context.Agents
+            .Include(a => a.User)
+            .Include(a => a.Zone)
+            .FirstOrDefaultAsync(a => a.Id == agentId);
+
+        if (agent == null)
+        {
+            throw new KeyNotFoundException($"Agent with ID {agentId} not found.");
+        }
+
+        // If previously assigned to another agent, release previous agent
+        if (order.AssignedAgentId.HasValue && order.AssignedAgentId.Value != agentId)
+        {
+            var prevAgent = await _context.Agents.FindAsync(order.AssignedAgentId.Value);
+            if (prevAgent != null)
+            {
+                prevAgent.IsAvailable = true;
+            }
+        }
+
+        var pickupArea = order.PickupArea;
+        (double pickupLat, double pickupLon) = GetZoneCoordinates(pickupArea?.Zone?.Code ?? "");
+        double distanceKm = Math.Round(CalculateHaversineDistanceKm(agent.Latitude, agent.Longitude, pickupLat, pickupLon), 2);
+
+        order.AssignedAgentId = agent.Id;
+        order.UpdatedAt = DateTime.UtcNow;
+        agent.IsAvailable = false;
+
+        var history = new OrderStatusHistory
+        {
+            OrderId = order.Id,
+            Status = order.Status,
+            ActorId = adminUserId,
+            ActorRole = UserRole.Admin,
+            Notes = $"Manually assigned to agent '{agent.User?.FullName ?? agent.Id.ToString()}' by Admin",
+            Timestamp = DateTime.UtcNow
+        };
+        _context.OrderStatusHistories.Add(history);
+
+        await _context.SaveChangesAsync();
+
+        return new AgentAssignmentResponse
+        {
+            OrderId = order.Id,
+            TrackingNumber = order.TrackingNumber,
+            AssignedAgent = new AssignedAgentDto
+            {
+                Id = agent.Id,
+                Name = agent.User?.FullName ?? "Agent",
+                Email = agent.User?.Email ?? string.Empty,
+                ZoneName = agent.Zone?.Name ?? "Unknown Zone",
+                DistanceKm = distanceKm
+            },
+            Message = $"Agent {agent.User?.FullName} manually assigned by Admin."
         };
     }
 

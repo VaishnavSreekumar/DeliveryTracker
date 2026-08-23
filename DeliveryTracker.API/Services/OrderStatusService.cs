@@ -48,7 +48,7 @@ public class OrderStatusService : IOrderStatusService
             }
         }
 
-        // 4. Validate State Machine Transition
+        // 4. Validate State Machine Transition (Strict linear progression for standard updates)
         if (!IsValidTransition(order.Status, request.Status))
         {
             throw new InvalidOperationException($"Invalid status transition from '{order.Status}' to '{request.Status}'.");
@@ -144,7 +144,127 @@ public class OrderStatusService : IOrderStatusService
     }
 
     /// <summary>
-    /// Formal state machine transition rules for Phase 5 & 6 lifecycle.
+    /// Privileged Admin Status Override.
+    /// Allows Admin to set any status with an explicit mandatory reason and immutable audit record.
+    /// </summary>
+    public async Task<OrderStatusUpdateResponse> OverrideOrderStatusAsync(int orderId, AdminOverrideStatusRequest request, int adminUserId)
+    {
+        var order = await _context.Orders.FirstOrDefaultAsync(o => o.Id == orderId);
+        if (order == null)
+        {
+            throw new KeyNotFoundException($"Order with ID {orderId} not found.");
+        }
+
+        var adminUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == adminUserId);
+        if (adminUser == null || adminUser.Role != UserRole.Admin)
+        {
+            throw new UnauthorizedAccessException("Only administrators can perform status overrides.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+        {
+            throw new ArgumentException("A detailed override reason is mandatory for admin status overrides.");
+        }
+
+        var previousStatus = order.Status;
+        var now = DateTime.UtcNow;
+
+        var historyEntry = new OrderStatusHistory
+        {
+            OrderId = order.Id,
+            Status = request.Status,
+            ActorId = adminUser.Id,
+            ActorRole = UserRole.Admin,
+            Notes = $"ADMIN OVERRIDE: {request.Reason.Trim()}",
+            Timestamp = now
+        };
+
+        order.Status = request.Status;
+        order.UpdatedAt = now;
+
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+        await executionStrategy.ExecuteAsync(async () =>
+        {
+            using var transaction = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                _context.OrderStatusHistories.Add(historyEntry);
+
+                // If overridden to Delivered or Failed, release assigned agent
+                if (request.Status == OrderStatus.Delivered || request.Status == OrderStatus.Failed)
+                {
+                    if (order.AssignedAgentId.HasValue)
+                    {
+                        var agent = await _context.Agents.FindAsync(order.AssignedAgentId.Value);
+                        if (agent != null)
+                        {
+                            agent.IsAvailable = true;
+                        }
+                    }
+                }
+
+                // If overridden to Failed, record attempt & notification
+                if (request.Status == OrderStatus.Failed)
+                {
+                    int previousAttempts = await _context.DeliveryAttempts.CountAsync(d => d.OrderId == order.Id);
+                    int agentId = order.AssignedAgentId ?? 0;
+
+                    var deliveryAttempt = new DeliveryAttempt
+                    {
+                        OrderId = order.Id,
+                        AgentId = agentId,
+                        AttemptNumber = previousAttempts + 1,
+                        FailureReason = $"Admin Override: {request.Reason}",
+                        RescheduledDate = null,
+                        AttemptedAt = now
+                    };
+                    _context.DeliveryAttempts.Add(deliveryAttempt);
+
+                    var customerUser = await _context.Users.FirstOrDefaultAsync(u => u.Id == order.CustomerId);
+                    var notification = new Notification
+                    {
+                        UserId = order.CustomerId,
+                        OrderId = order.Id,
+                        Title = $"Delivery Status Updated by Admin - {order.TrackingNumber}",
+                        RecipientEmail = customerUser?.Email ?? "customer@delivery.com",
+                        Message = $"Order {order.TrackingNumber} status set to Failed by Administrator. Reason: {request.Reason}",
+                        IsRead = false,
+                        SentAt = now
+                    };
+                    _context.Notifications.Add(notification);
+                }
+
+                await _context.SaveChangesAsync();
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        });
+
+        return new OrderStatusUpdateResponse
+        {
+            OrderId = order.Id,
+            TrackingNumber = order.TrackingNumber,
+            PreviousStatus = previousStatus,
+            CurrentStatus = order.Status,
+            UpdatedAt = order.UpdatedAt,
+            HistoryEntry = new OrderStatusHistoryDto
+            {
+                Id = historyEntry.Id,
+                Status = historyEntry.Status,
+                ActorId = historyEntry.ActorId,
+                ActorRole = historyEntry.ActorRole,
+                Notes = historyEntry.Notes,
+                Timestamp = historyEntry.Timestamp
+            }
+        };
+    }
+
+    /// <summary>
+    /// Formal state machine transition rules for standard agent lifecycle.
     /// </summary>
     private static bool IsValidTransition(OrderStatus current, OrderStatus next)
     {

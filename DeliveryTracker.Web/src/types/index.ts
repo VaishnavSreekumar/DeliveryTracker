@@ -83,8 +83,13 @@ export interface OrderSummary {
   id: number;
   trackingNumber: string;
   customerId: number;
+  customerName?: string;
   pickupArea: string;
+  pickupZone?: string;
+  pickupZoneId?: number;
   dropArea: string;
+  dropZone?: string;
+  dropZoneId?: number;
   totalAmount: number;
   status: OrderStatus;
   assignedAgentId?: number;
@@ -122,5 +127,23 @@ export interface RateCard {
   intraZoneRatePerKg: number;
   interZoneRatePerKg: number;
   codSurcharge: number;
+}
+
+export interface AdminCustomer {
+  id: number;
+  fullName: string;
+  email: string;
+}
+
+export interface AdminAgent {
+  id: number;
+  userId: number;
+  name: string;
+  email: string;
+  zoneId: number;
+  zoneName: string;
+  isAvailable: boolean;
+  latitude: number;
+  longitude: number;
 }
 

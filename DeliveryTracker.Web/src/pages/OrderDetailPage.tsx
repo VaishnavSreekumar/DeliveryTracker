@@ -23,6 +23,12 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
   // Modals state
   const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
   const [isStatusUpdateOpen, setIsStatusUpdateOpen] = useState(false);
+  const [isOverrideOpen, setIsOverrideOpen] = useState(false);
+  const [overrideForm, setOverrideForm] = useState<{ status: string; reason: string }>({
+    status: 'Delivered',
+    reason: '',
+  });
+  const [overrideError, setOverrideError] = useState<string | null>(null);
 
   const fetchOrder = async () => {
     setIsLoading(true);
@@ -49,6 +55,19 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
     }
   };
 
+  const handleExecuteOverride = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!order || !overrideForm.reason.trim()) return;
+    setOverrideError(null);
+    try {
+      await apiClient.post(`/orders/${order.id}/override-status`, overrideForm);
+      setIsOverrideOpen(false);
+      fetchOrder();
+    } catch (err: any) {
+      setOverrideError(err.message || 'Status override failed.');
+    }
+  };
+
   if (isLoading) {
     return <div style={{ color: 'var(--text-muted)', padding: '2rem', textAlign: 'center' }}>Loading order details...</div>;
   }
@@ -72,7 +91,7 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
 
   const canReschedule = isCustomer && order.status === 'Failed';
   const canAgentUpdateStatus =
-    (isAgent || isAdmin) &&
+    isAgent &&
     order.status !== 'Delivered' &&
     order.status !== 'Failed';
 
@@ -84,9 +103,24 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
           <ArrowLeft size={16} /> Back to Orders List
         </button>
 
-        <button onClick={fetchOrder} className="btn btn-secondary btn-sm">
-          <RefreshCw size={14} /> Refresh Order
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {isAdmin && (
+            <button
+              onClick={() => {
+                setOverrideForm({ status: order.status, reason: '' });
+                setIsOverrideOpen(true);
+              }}
+              className="btn btn-secondary"
+              style={{ color: '#f59e0b', borderColor: 'rgba(245, 158, 11, 0.4)' }}
+            >
+              <AlertTriangle size={15} /> Admin Override Status
+            </button>
+          )}
+
+          <button onClick={fetchOrder} className="btn btn-secondary btn-sm">
+            <RefreshCw size={14} /> Refresh Order
+          </button>
+        </div>
       </div>
 
       {/* Primary Header Card */}
@@ -266,6 +300,67 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
           onClose={() => setIsStatusUpdateOpen(false)}
           onSuccess={fetchOrder}
         />
+      )}
+
+      {/* Admin Privileged Status Override Modal */}
+      {isOverrideOpen && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div className="card" style={{ maxWidth: '480px', width: '100%', display: 'flex', flexDirection: 'column', gap: '1rem', border: '1px solid rgba(245, 158, 11, 0.4)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 600, color: '#f59e0b', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <AlertTriangle size={18} /> Privileged Admin Status Override
+              </h3>
+              <button onClick={() => setIsOverrideOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>&times;</button>
+            </div>
+
+            <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.12)', border: '1px solid rgba(245, 158, 11, 0.25)', color: '#fbbf24', padding: '0.75rem', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem' }}>
+              <strong>Admin Override:</strong> Directly changes order state from <strong>{order.status}</strong>. An immutable audit record with your Admin user ID and reason will be appended.
+            </div>
+
+            {overrideError && (
+              <div style={{ backgroundColor: 'rgba(244, 63, 94, 0.15)', color: '#fb7185', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-md)', fontSize: '0.8125rem' }}>
+                {overrideError}
+              </div>
+            )}
+
+            <form onSubmit={handleExecuteOverride} style={{ display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+              <div>
+                <label className="label">Target Status</label>
+                <select
+                  value={overrideForm.status}
+                  onChange={(e) => setOverrideForm({ ...overrideForm, status: e.target.value })}
+                  className="input-control"
+                  required
+                >
+                  <option value="Created">Created</option>
+                  <option value="PickedUp">PickedUp</option>
+                  <option value="InTransit">InTransit</option>
+                  <option value="OutForDelivery">OutForDelivery</option>
+                  <option value="Delivered">Delivered</option>
+                  <option value="Failed">Failed</option>
+                  <option value="Rescheduled">Rescheduled</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="label">Mandatory Override Reason</label>
+                <textarea
+                  required
+                  rows={3}
+                  placeholder="State the reason for this administrative status change..."
+                  value={overrideForm.reason}
+                  onChange={(e) => setOverrideForm({ ...overrideForm, reason: e.target.value })}
+                  className="input-control"
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+                <button type="button" onClick={() => setIsOverrideOpen(false)} className="btn btn-secondary">Cancel</button>
+                <button type="submit" className="btn btn-primary" style={{ backgroundColor: '#d97706', borderColor: '#d97706' }}>Execute Override</button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

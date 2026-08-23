@@ -17,7 +17,7 @@ public class OrderService : IOrderService
         _pricingService = pricingService;
     }
 
-    public async Task<OrderResponse> CreateOrderAsync(CreateOrderRequest request)
+    public async Task<OrderResponse> CreateOrderAsync(CreateOrderRequest request, int? creatorUserId = null, UserRole? creatorRole = null)
     {
         // 1. Validate Customer existence
         var customer = await _context.Users
@@ -47,7 +47,7 @@ public class OrderService : IOrderService
             throw new KeyNotFoundException($"Drop area with ID {request.DropAreaId} not found.");
         }
 
-        // 3. Reuse PricingService for exact price calculation (No calculation logic duplication!)
+        // 3. Reuse PricingService for exact price calculation
         var pricingRequest = new CalculatePriceRequest
         {
             PickupAreaId = request.PickupAreaId,
@@ -97,7 +97,14 @@ public class OrderService : IOrderService
             UpdatedAt = DateTime.UtcNow
         };
 
-        // 6. Execute atomic database transaction for Order + initial OrderStatusHistory
+        // 6. Determine Creator metadata for initial audit trail
+        int actorId = creatorUserId ?? request.CustomerId;
+        UserRole actorRole = creatorRole ?? UserRole.Customer;
+        string notes = (actorRole == UserRole.Admin)
+            ? $"Order created by Admin on behalf of Customer '{customer.FullName}'"
+            : "Order created";
+
+        // 7. Execute atomic database transaction for Order + initial OrderStatusHistory
         var executionStrategy = _context.Database.CreateExecutionStrategy();
 
         await executionStrategy.ExecuteAsync(async () =>
@@ -112,9 +119,9 @@ public class OrderService : IOrderService
                 {
                     OrderId = order.Id,
                     Status = OrderStatus.Created,
-                    ActorId = request.CustomerId,
-                    ActorRole = UserRole.Customer,
-                    Notes = "Order created",
+                    ActorId = actorId,
+                    ActorRole = actorRole,
+                    Notes = notes,
                     Timestamp = DateTime.UtcNow
                 };
 
@@ -130,7 +137,7 @@ public class OrderService : IOrderService
             }
         });
 
-        // 7. Return complete OrderResponse
+        // 8. Return complete OrderResponse
         return await GetOrderByIdAsync(order.Id) 
             ?? throw new InvalidOperationException("Failed to retrieve order after creation.");
     }
@@ -200,17 +207,50 @@ public class OrderService : IOrderService
         };
     }
 
-    public async Task<IEnumerable<OrderSummaryResponse>> GetOrdersAsync(int? customerId = null)
+    public async Task<IEnumerable<OrderSummaryResponse>> GetOrdersAsync(
+        int? customerId = null,
+        OrderStatus? status = null,
+        int? zoneId = null,
+        int? agentId = null,
+        string? search = null)
     {
         var query = _context.Orders
-            .Include(o => o.PickupArea)
-            .Include(o => o.DropArea)
+            .Include(o => o.Customer)
+            .Include(o => o.PickupArea!).ThenInclude(a => a.Zone)
+            .Include(o => o.DropArea!).ThenInclude(a => a.Zone)
             .Include(o => o.AssignedAgent!).ThenInclude(a => a.User)
             .AsQueryable();
 
         if (customerId.HasValue)
         {
             query = query.Where(o => o.CustomerId == customerId.Value);
+        }
+
+        if (status.HasValue)
+        {
+            query = query.Where(o => o.Status == status.Value);
+        }
+
+        if (zoneId.HasValue)
+        {
+            query = query.Where(o => (o.PickupArea != null && o.PickupArea.ZoneId == zoneId.Value) ||
+                                     (o.DropArea != null && o.DropArea.ZoneId == zoneId.Value));
+        }
+
+        if (agentId.HasValue)
+        {
+            query = query.Where(o => o.AssignedAgentId == agentId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.Trim().ToLower();
+            query = query.Where(o => o.TrackingNumber.ToLower().Contains(searchLower) ||
+                                     (o.Customer != null && o.Customer.FullName.ToLower().Contains(searchLower)) ||
+                                     (o.PickupArea != null && o.PickupArea.Name.ToLower().Contains(searchLower)) ||
+                                     (o.DropArea != null && o.DropArea.Name.ToLower().Contains(searchLower)) ||
+                                     o.PickupAddress.ToLower().Contains(searchLower) ||
+                                     o.DropAddress.ToLower().Contains(searchLower));
         }
 
         var orders = await query
@@ -222,8 +262,13 @@ public class OrderService : IOrderService
             Id = o.Id,
             TrackingNumber = o.TrackingNumber,
             CustomerId = o.CustomerId,
+            CustomerName = o.Customer?.FullName ?? "Unknown Customer",
             PickupArea = o.PickupArea?.Name ?? string.Empty,
+            PickupZone = o.PickupArea?.Zone?.Name ?? string.Empty,
+            PickupZoneId = o.PickupArea?.ZoneId ?? 0,
             DropArea = o.DropArea?.Name ?? string.Empty,
+            DropZone = orderZone(o.DropArea?.Zone?.Name),
+            DropZoneId = o.DropArea?.ZoneId ?? 0,
             TotalAmount = o.TotalAmount,
             Status = o.Status,
             AssignedAgentId = o.AssignedAgentId,
@@ -231,4 +276,6 @@ public class OrderService : IOrderService
             CreatedAt = o.CreatedAt
         });
     }
+
+    private static string orderZone(string? zoneName) => zoneName ?? string.Empty;
 }

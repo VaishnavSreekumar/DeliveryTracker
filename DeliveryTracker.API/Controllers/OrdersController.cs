@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using DeliveryTracker.API.Data;
 using DeliveryTracker.API.DTOs;
+using DeliveryTracker.API.Enums;
 using DeliveryTracker.API.Services;
 
 namespace DeliveryTracker.API.Controllers;
@@ -32,6 +33,9 @@ public class OrdersController : ControllerBase
         _context = context;
     }
 
+    /// <summary>
+    /// Creates a shipment order. Customers create for themselves; Admins can create on behalf of any Customer.
+    /// </summary>
     [HttpPost]
     [Authorize(Roles = "Customer,Admin")]
     public async Task<ActionResult<OrderResponse>> CreateOrder([FromBody] CreateOrderRequest request)
@@ -41,16 +45,18 @@ public class OrdersController : ControllerBase
             return BadRequest(ModelState);
         }
 
-        // If authenticated user is a Customer, derive customerId strictly from JWT claims
         var currentUserId = GetUserId();
-        if (currentUserId.HasValue && User.IsInRole("Customer"))
+        UserRole creatorRole = User.IsInRole("Admin") ? UserRole.Admin : UserRole.Customer;
+
+        // If authenticated user is a Customer, force customerId strictly from JWT claims
+        if (currentUserId.HasValue && creatorRole == UserRole.Customer)
         {
             request.CustomerId = currentUserId.Value;
         }
 
         try
         {
-            var result = await _orderService.CreateOrderAsync(request);
+            var result = await _orderService.CreateOrderAsync(request, currentUserId, creatorRole);
             return CreatedAtAction(nameof(GetOrderById), new { id = result.Id }, result);
         }
         catch (ArgumentException ex)
@@ -67,7 +73,10 @@ public class OrdersController : ControllerBase
         }
     }
 
-    [HttpGet("{id}")]
+    /// <summary>
+    /// Retrieves a single order by ID with privacy scoping.
+    /// </summary>
+    [HttpGet("{id:int}")]
     [Authorize]
     public async Task<ActionResult<OrderResponse>> GetOrderById(int id)
     {
@@ -101,9 +110,17 @@ public class OrdersController : ControllerBase
         return Ok(order);
     }
 
+    /// <summary>
+    /// Retrieves orders with role-scoping and multi-parameter filtering (status, zone, agent, search).
+    /// </summary>
     [HttpGet]
     [Authorize]
-    public async Task<ActionResult<IEnumerable<OrderSummaryResponse>>> GetOrders([FromQuery] int? customerId)
+    public async Task<ActionResult<IEnumerable<OrderSummaryResponse>>> GetOrders(
+        [FromQuery] int? customerId = null,
+        [FromQuery] OrderStatus? status = null,
+        [FromQuery] int? zoneId = null,
+        [FromQuery] int? agentId = null,
+        [FromQuery] string? search = null)
     {
         var currentUserId = GetUserId();
         if (currentUserId.HasValue)
@@ -111,7 +128,7 @@ public class OrdersController : ControllerBase
             if (User.IsInRole("Customer"))
             {
                 // Customer gets only their own orders
-                var customerOrders = await _orderService.GetOrdersAsync(currentUserId.Value);
+                var customerOrders = await _orderService.GetOrdersAsync(currentUserId.Value, status, zoneId, null, search);
                 return Ok(customerOrders);
             }
 
@@ -124,18 +141,41 @@ public class OrdersController : ControllerBase
                     return Ok(Enumerable.Empty<OrderSummaryResponse>());
                 }
 
-                var allOrders = await _orderService.GetOrdersAsync(null);
-                var agentOrders = allOrders.Where(o => o.AssignedAgentId == agent.Id);
+                var agentOrders = await _orderService.GetOrdersAsync(null, status, zoneId, agent.Id, search);
                 return Ok(agentOrders);
             }
         }
 
-        // Admin (or unauthenticated unit test runner) gets requested customerId or all orders
-        var orders = await _orderService.GetOrdersAsync(customerId);
+        // Admin gets all orders with full multi-dimensional filtering
+        var orders = await _orderService.GetOrdersAsync(customerId, status, zoneId, agentId, search);
         return Ok(orders);
     }
 
-    [HttpPost("{id}/auto-assign")]
+    /// <summary>
+    /// Retrieves all registered customer accounts (Admin only).
+    /// </summary>
+    [HttpGet("customers")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<IEnumerable<AdminCustomerDto>>> GetCustomers()
+    {
+        var customers = await _context.Users
+            .Where(u => u.Role == UserRole.Customer)
+            .OrderBy(u => u.FullName)
+            .Select(u => new AdminCustomerDto
+            {
+                Id = u.Id,
+                FullName = u.FullName,
+                Email = u.Email
+            })
+            .ToListAsync();
+
+        return Ok(customers);
+    }
+
+    /// <summary>
+    /// Triggers intelligent auto-assignment algorithm (Admin only).
+    /// </summary>
+    [HttpPost("{id:int}/auto-assign")]
     [Authorize(Roles = "Admin")]
     public async Task<ActionResult<AgentAssignmentResponse>> AutoAssignAgent(int id)
     {
@@ -154,7 +194,39 @@ public class OrdersController : ControllerBase
         }
     }
 
-    [HttpPatch("{id}/status")]
+    /// <summary>
+    /// Manually assigns a specific agent to an order (Admin only).
+    /// </summary>
+    [HttpPost("{id:int}/assign")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<AgentAssignmentResponse>> ManualAssignAgent(int id, [FromBody] ManualAssignAgentRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var currentUserId = GetUserId() ?? 1;
+
+        try
+        {
+            var response = await _agentAssignmentService.ManualAssignAgentAsync(id, request.AgentId, currentUserId);
+            return Ok(response);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Standard Agent order progression through strict linear state machine.
+    /// </summary>
+    [HttpPatch("{id:int}/status")]
     [Authorize(Roles = "Agent,Admin")]
     public async Task<ActionResult<OrderStatusUpdateResponse>> UpdateOrderStatus(int id, [FromBody] UpdateOrderStatusRequest request)
     {
@@ -188,7 +260,44 @@ public class OrdersController : ControllerBase
         }
     }
 
-    [HttpPost("{id}/reschedule")]
+    /// <summary>
+    /// Privileged Admin Status Override.
+    /// Allows setting any target status with a mandatory recorded reason (Admin only).
+    /// </summary>
+    [HttpPost("{id:int}/override-status")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<OrderStatusUpdateResponse>> OverrideOrderStatus(int id, [FromBody] AdminOverrideStatusRequest request)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        var currentUserId = GetUserId() ?? 1;
+
+        try
+        {
+            var response = await _orderStatusService.OverrideOrderStatusAsync(id, request, currentUserId);
+            return Ok(response);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new { message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Reschedules a failed delivery (Customer or Admin).
+    /// </summary>
+    [HttpPost("{id:int}/reschedule")]
     [Authorize(Roles = "Customer,Admin")]
     public async Task<ActionResult<RescheduleOrderResponse>> RescheduleOrder(int id, [FromBody] RescheduleOrderRequest request)
     {
