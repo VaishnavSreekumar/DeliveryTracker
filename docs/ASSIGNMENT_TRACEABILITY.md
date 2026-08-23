@@ -11,8 +11,8 @@
 | :--- | :--- | :--- |
 | `dotnet build` (API) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
 | `dotnet build` (Tests) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
-| `dotnet test` (69 tests) | ✅ **69/69 PASSED** | Failed: 0, Passed: 69, Skipped: 0 |
-| `npm run build` (Frontend) | ✅ **Exit 0** | TypeScript compiled clean, Vite bundle 267.65 kB |
+| `dotnet test` (75 tests) | ✅ **75/75 PASSED** | Failed: 0, Passed: 75, Skipped: 0 |
+| `npm run build` (Frontend) | ✅ **Exit 0** | TypeScript compiled clean, Vite bundle 287.25 kB |
 
 ### Test Suite Breakdown
 | Test Class | Tests | Coverage |
@@ -24,7 +24,8 @@
 | `NotificationTests` | 7 | Failure & reschedule notifications, user scoping, ownership security, read marking |
 | `AuthServiceTests` | 7 | Registration, login, duplicate email, invalid credentials, JWT generation |
 | `OrderServiceTests` | 11 | Order creation, volumetric pricing persistence, customer scoping, admin visibility |
-| **Total** | **69** | **100% Pass Rate** |
+| `AdminConfigurationTests` | 6 | Zones CRUD, Areas CRUD & Zone Reassignment, RateCards update, dynamic pricing |
+| **Total** | **75** | **100% Pass Rate** |
 
 ---
 
@@ -46,7 +47,8 @@
 | **REQ-12** | Immutable Audit Trail | Append-only `OrderStatusHistories` records every status transition with actor ID, role, notes, and timestamp. | ✅ **COMPLETE** |
 | **REQ-13** | Role-Based Authorization | `[Authorize(Roles = "...")]` on all controllers with JWT bearer validation. | ✅ **COMPLETE** |
 | **REQ-14** | Customer Notification Center | `GET /api/notifications` + `PATCH /api/notifications/{id}/read` + `NotificationCenter.tsx` dropdown with unread badge. | ✅ **COMPLETE** (Phase B) |
-| **REQ-15** | Comprehensive Test Suite | 69 automated xUnit unit & controller tests across 7 test classes. | ✅ **COMPLETE** (Phase C) |
+| **REQ-15** | Comprehensive Test Suite | 75 automated xUnit unit & controller tests across 8 test classes. | ✅ **COMPLETE** (Phase C/D1) |
+| **REQ-16** | Admin Configuration Management | Zones CRUD (`/api/zones`), Areas CRUD & Zone Reassignment (`/api/areas`), RateCards configuration (`/api/ratecards`), `AdminConfigurationManager.tsx` UI. | ✅ **COMPLETE** (Phase D1) |
 
 ---
 
@@ -57,6 +59,7 @@
 | **GAP-001** | `Order` entity missing `RescheduledDate` | Added `DateTime? RescheduledDate` to `Order`, generated migration `AddRescheduledDateToOrder`, persisted in `DeliveryRecoveryService`, exposed in `OrderResponse` and `OrderDetailPage.tsx`. | **Phase A (005c452)** |
 | **GAP-002** | `Notification` missing `UserId`, `Title`, `IsRead` | Added `UserId` FK, `Title`, `IsRead` to `Notification`, generated migration `AddNotificationDetailsAndUserId`, updated `OrderStatusService` and `DeliveryRecoveryService`. | **Phase B (4d2796a)** |
 | **GAP-003** | Missing Customer Notification UI | Added `NotificationsController` (`GET`, `PATCH /read`) and `NotificationCenter.tsx` component in header with live polling & unread badge. | **Phase B (4d2796a)** |
-| **DOC-001–004** | Outdated ER & entity fields in `ARCHITECTURE.md` | Rewrote `docs/ARCHITECTURE.md` to reflect exact source code models, algorithms, and security architecture. | **Phase C** |
-| **TEST-001** | Empty placeholder `UnitTest1.cs` | Removed `UnitTest1.cs`. | **Phase C** |
-| **TEST-002** | Minimal `OrderService` test coverage | Added 5 focused tests to `OrderServiceTests.cs` (scoping, global visibility, detail retrieval, invalid arguments). | **Phase C** |
+| **DOC-001–004** | Outdated ER & entity fields in `ARCHITECTURE.md` | Rewrote `docs/ARCHITECTURE.md` to reflect exact source code models, algorithms, and security architecture. | **Phase C (480302c)** |
+| **TEST-001** | Empty placeholder `UnitTest1.cs` | Removed `UnitTest1.cs`. | **Phase C (480302c)** |
+| **TEST-002** | Minimal `OrderService` test coverage | Added 5 focused tests to `OrderServiceTests.cs` (scoping, global visibility, detail retrieval, invalid arguments). | **Phase C (480302c)** |
+| **CFG-001** | Dynamic Admin Configuration Management | Implemented complete Zones, Areas (with Zone Reassignment), and RateCards CRUD APIs and frontend UI with dynamic pricing reflection. | **Phase D1** |

@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import type { OrderSummary } from '../types';
 import { apiClient } from '../api/apiClient';
 import { StatusBadge } from '../components/StatusBadge';
-import { Shield, Package, Truck, AlertTriangle, CheckCircle2, Search, Filter, Eye, RefreshCw, AlertCircle } from 'lucide-react';
+import { AdminConfigurationManager } from '../components/AdminConfigurationManager';
+import { Shield, Package, Truck, AlertTriangle, CheckCircle2, Search, Filter, Eye, RefreshCw, AlertCircle, Sliders } from 'lucide-react';
 
 interface AdminOperationsPageProps {
   onSelectOrder: (orderId: number) => void;
 }
 
 export const AdminOperationsPage: React.FC<AdminOperationsPageProps> = ({ onSelectOrder }) => {
+  const [activeSection, setActiveSection] = useState<'dispatch' | 'configuration'>('dispatch');
   const [orders, setOrders] = useState<OrderSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,20 +64,72 @@ export const AdminOperationsPage: React.FC<AdminOperationsPageProps> = ({ onSele
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Intro Banner */}
+      {/* Intro Banner with Section Navigation */}
       <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <h3 style={{ fontSize: '1rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Shield size={18} color="var(--brand-primary)" /> Operations Management Console
           </h3>
           <p style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            System-wide order monitoring, agent assignment dispatching, and recovery oversight.
+            System-wide order monitoring, agent assignment dispatching, and system configuration.
           </p>
         </div>
-        <button onClick={fetchOrders} className="btn btn-secondary btn-sm">
-          <RefreshCw size={14} /> Refresh Console
-        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', gap: '0.25rem', backgroundColor: 'var(--bg-app)', padding: '0.25rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+            <button
+              onClick={() => setActiveSection('dispatch')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                backgroundColor: activeSection === 'dispatch' ? 'var(--brand-primary)' : 'transparent',
+                color: activeSection === 'dispatch' ? '#0f172a' : 'var(--text-secondary)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Truck size={14} /> Dispatch & Orders
+            </button>
+
+            <button
+              onClick={() => setActiveSection('configuration')}
+              style={{
+                padding: '0.35rem 0.75rem',
+                fontSize: '0.8125rem',
+                fontWeight: 600,
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                backgroundColor: activeSection === 'configuration' ? 'var(--brand-primary)' : 'transparent',
+                color: activeSection === 'configuration' ? '#0f172a' : 'var(--text-secondary)',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <Sliders size={14} /> System Configuration
+            </button>
+          </div>
+
+          {activeSection === 'dispatch' && (
+            <button onClick={fetchOrders} className="btn btn-secondary btn-sm">
+              <RefreshCw size={14} /> Refresh
+            </button>
+          )}
+        </div>
       </div>
+
+      {activeSection === 'configuration' ? (
+        <AdminConfigurationManager />
+      ) : (
+        <>
 
       {error && (
         <div style={{ backgroundColor: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)', color: '#fb7185', padding: '0.875rem 1rem', borderRadius: 'var(--radius-md)', fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -249,6 +303,8 @@ export const AdminOperationsPage: React.FC<AdminOperationsPageProps> = ({ onSele
           </div>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 };

@@ -115,3 +115,12 @@ export interface AppNotification {
   isRead: boolean;
   sentAt: string;
 }
+
+export interface RateCard {
+  id: number;
+  orderType: OrderType;
+  intraZoneRatePerKg: number;
+  interZoneRatePerKg: number;
+  codSurcharge: number;
+}
+
