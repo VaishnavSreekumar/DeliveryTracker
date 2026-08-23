@@ -5,8 +5,13 @@ using Microsoft.IdentityModel.Tokens;
 using DeliveryTracker.API.Data;
 using DeliveryTracker.API.Services;
 using DeliveryTracker.API.Services.Communication;
+// Load local environment variables from .env.local and .env if present (Server-side only)
+LoadLocalEnvironmentFile(Path.Combine(Directory.GetCurrentDirectory(), ".env.local"));
+LoadLocalEnvironmentFile(Path.Combine(Directory.GetCurrentDirectory(), ".env"));
+LoadLocalEnvironmentFile(Path.Combine(AppContext.BaseDirectory, ".env.local"));
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddEnvironmentVariables();
 
 // Add services to the container.
 builder.Services.AddControllers()
@@ -103,3 +108,27 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+static void LoadLocalEnvironmentFile(string filePath)
+{
+    if (!File.Exists(filePath)) return;
+    try
+    {
+        foreach (var line in File.ReadAllLines(filePath))
+        {
+            var trimmed = line.Trim();
+            if (string.IsNullOrWhiteSpace(trimmed) || trimmed.StartsWith("#")) continue;
+            var idx = trimmed.IndexOf('=');
+            if (idx > 0)
+            {
+                var key = trimmed[..idx].Trim();
+                var val = trimmed[(idx + 1)..].Trim().Trim('"', '\'');
+                Environment.SetEnvironmentVariable(key, val);
+            }
+        }
+    }
+    catch
+    {
+        // Safe fallback
+    }
+}

@@ -55,7 +55,19 @@ public class SmtpEmailProvider : IEmailNotificationProvider
         var password = _configuration["Notification:Email:Smtp:Password"] ?? _configuration["SMTP_PASSWORD"];
         var fromAddress = _configuration["Notification:Email:FromAddress"] ?? _configuration["SMTP_FROM"] ?? _configuration["NOTIFICATION_EMAIL_FROM"] ?? "notifications@deliverytracker.com";
 
-        if (string.IsNullOrWhiteSpace(host) || !int.TryParse(portStr, out int port) || string.IsNullOrWhiteSpace(username) || username.StartsWith("your_"))
+        int port = 587;
+        bool isConfigured = !string.IsNullOrWhiteSpace(host)
+            && int.TryParse(portStr, out port)
+            && !string.IsNullOrWhiteSpace(username)
+            && !username.StartsWith("your_")
+            && !username.StartsWith("PASTE_")
+            && !username.StartsWith("YOUR_")
+            && !string.IsNullOrWhiteSpace(password)
+            && !password.StartsWith("your_")
+            && !password.StartsWith("PASTE_")
+            && !password.StartsWith("YOUR_");
+
+        if (!isConfigured)
         {
             _logger.LogWarning("SMTP credentials unconfigured in Real notification mode.");
             return CommunicationResult.Fail("SmtpEmailProvider", "SMTP credentials not configured for Real notification mode.");
@@ -133,10 +145,31 @@ public class TwilioSmsProvider : ISmsNotificationProvider
         }
 
         var accountSid = _configuration["Notification:Sms:Twilio:AccountSid"] ?? _configuration["TWILIO_ACCOUNT_SID"];
+        var apiKey = _configuration["TWILIO_API_KEY"];
+        var apiSecret = _configuration["TWILIO_API_SECRET"];
         var authToken = _configuration["Notification:Sms:Twilio:AuthToken"] ?? _configuration["TWILIO_AUTH_TOKEN"];
         var fromNumber = _configuration["Notification:Sms:FromNumber"] ?? _configuration["TWILIO_FROM_NUMBER"] ?? _configuration["NOTIFICATION_SMS_FROM"] ?? "+18005550199";
 
-        if (string.IsNullOrWhiteSpace(accountSid) || string.IsNullOrWhiteSpace(authToken) || accountSid.StartsWith("your_"))
+        // Determine basic auth credentials: (ApiKey:ApiSecret) OR (AccountSid:AuthToken)
+        string authUser = !string.IsNullOrWhiteSpace(apiKey) && !apiKey.StartsWith("PASTE_") && !apiKey.StartsWith("YOUR_")
+            ? apiKey
+            : accountSid ?? "";
+
+        string authSecret = !string.IsNullOrWhiteSpace(apiSecret) && !apiSecret.StartsWith("PASTE_") && !apiSecret.StartsWith("YOUR_")
+            ? apiSecret
+            : authToken ?? "";
+
+        bool isConfigured = !string.IsNullOrWhiteSpace(accountSid)
+            && !accountSid.StartsWith("your_")
+            && !accountSid.StartsWith("PASTE_")
+            && !accountSid.StartsWith("YOUR_")
+            && !string.IsNullOrWhiteSpace(authUser)
+            && !string.IsNullOrWhiteSpace(authSecret)
+            && !authSecret.StartsWith("your_")
+            && !authSecret.StartsWith("PASTE_")
+            && !authSecret.StartsWith("YOUR_");
+
+        if (!isConfigured)
         {
             _logger.LogWarning("Twilio credentials unconfigured in Real notification mode.");
             return CommunicationResult.Fail("TwilioSmsProvider", "Twilio credentials not configured for Real notification mode.");
@@ -146,7 +179,7 @@ public class TwilioSmsProvider : ISmsNotificationProvider
         {
             var requestUrl = $"https://api.twilio.com/2010-04-01/Accounts/{accountSid}/Messages.json";
             var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
-            var byteArray = System.Text.Encoding.ASCII.GetBytes($"{accountSid}:{authToken}");
+            var byteArray = System.Text.Encoding.ASCII.GetBytes($"{authUser}:{authSecret}");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
 
             var formContent = new FormUrlEncodedContent(new[]

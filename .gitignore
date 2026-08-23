@@ -26,3 +26,7 @@ Thumbs.db
 .env.local
 .env.*.local
 *.env
+*.env.local
+**/.env
+**/.env.local
+DeliveryTracker.API/.env.local
