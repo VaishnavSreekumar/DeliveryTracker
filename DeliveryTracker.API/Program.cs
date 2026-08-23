@@ -67,8 +67,8 @@ builder.Services.AddCors(options =>
 
 // Register Services
 builder.Services.AddScoped<IPricingService, PricingService>();
-builder.Services.AddScoped<IEmailNotificationProvider, DeliveryTracker.API.Services.Communication.DevelopmentEmailProvider>();
-builder.Services.AddScoped<ISmsNotificationProvider, DeliveryTracker.API.Services.Communication.DevelopmentSmsProvider>();
+builder.Services.AddScoped<IEmailNotificationProvider, SmtpEmailProvider>();
+builder.Services.AddScoped<ISmsNotificationProvider, TwilioSmsProvider>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<IAgentAssignmentService, AgentAssignmentService>();

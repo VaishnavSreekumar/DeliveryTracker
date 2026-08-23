@@ -16,7 +16,7 @@ public class DevelopmentEmailProvider : IEmailNotificationProvider
 
     public Task<CommunicationResult> SendEmailAsync(string recipientEmail, string subject, string body, string eventType, int? orderId = null)
     {
-        _logger.LogInformation("[DEV EMAIL SIMULATION] To: {Recipient} | Event: {Event} | Order: {OrderId} | Subject: {Subject}",
+        _logger.LogInformation("[EMAIL SIMULATION] To: {Recipient} | Event: {Event} | Order: {OrderId} | Subject: {Subject}",
             recipientEmail, eventType, orderId, subject);
 
         return Task.FromResult(CommunicationResult.Ok("DevelopmentEmailProvider", Guid.NewGuid().ToString("N")[..8]));
@@ -36,15 +36,15 @@ public class SmtpEmailProvider : IEmailNotificationProvider
 
     public async Task<CommunicationResult> SendEmailAsync(string recipientEmail, string subject, string body, string eventType, int? orderId = null)
     {
-        var host = _configuration["Notification:Email:Smtp:Host"];
-        var portStr = _configuration["Notification:Email:Smtp:Port"];
-        var username = _configuration["Notification:Email:Smtp:Username"];
-        var password = _configuration["Notification:Email:Smtp:Password"];
-        var fromAddress = _configuration["Notification:Email:FromAddress"] ?? "notifications@deliverytracker.com";
+        var host = _configuration["Notification:Email:Smtp:Host"] ?? _configuration["SMTP_HOST"];
+        var portStr = _configuration["Notification:Email:Smtp:Port"] ?? _configuration["SMTP_PORT"];
+        var username = _configuration["Notification:Email:Smtp:Username"] ?? _configuration["SMTP_USERNAME"];
+        var password = _configuration["Notification:Email:Smtp:Password"] ?? _configuration["SMTP_PASSWORD"];
+        var fromAddress = _configuration["Notification:Email:FromAddress"] ?? _configuration["NOTIFICATION_EMAIL_FROM"] ?? "notifications@deliverytracker.com";
 
-        if (string.IsNullOrWhiteSpace(host) || !int.TryParse(portStr, out int port))
+        if (string.IsNullOrWhiteSpace(host) || !int.TryParse(portStr, out int port) || string.IsNullOrWhiteSpace(username) || username.StartsWith("your_"))
         {
-            _logger.LogWarning("SMTP configuration incomplete. Falling back to development simulated email.");
+            _logger.LogInformation("[SMTP SIMULATION] Credentials unconfigured. Simulating email to {Recipient}: {Subject}", recipientEmail, subject);
             return CommunicationResult.Ok("SmtpEmailProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
         }
 
@@ -62,6 +62,7 @@ public class SmtpEmailProvider : IEmailNotificationProvider
             };
 
             await client.SendMailAsync(mail);
+            _logger.LogInformation("[SMTP SUCCESS] Real email sent to {Recipient} for order {OrderId}", recipientEmail, orderId);
             return CommunicationResult.Ok("SmtpEmailProvider", Guid.NewGuid().ToString("N")[..8]);
         }
         catch (Exception ex)
@@ -83,9 +84,68 @@ public class DevelopmentSmsProvider : ISmsNotificationProvider
 
     public Task<CommunicationResult> SendSmsAsync(string recipientPhone, string message, string eventType, int? orderId = null)
     {
-        _logger.LogInformation("[DEV SMS SIMULATION] To: {Phone} | Event: {Event} | Order: {OrderId} | Message: {Message}",
+        _logger.LogInformation("[SMS SIMULATION] To: {Phone} | Event: {Event} | Order: {OrderId} | Message: {Message}",
             recipientPhone, eventType, orderId, message);
 
         return Task.FromResult(CommunicationResult.Ok("DevelopmentSmsProvider", Guid.NewGuid().ToString("N")[..8]));
+    }
+}
+
+public class TwilioSmsProvider : ISmsNotificationProvider
+{
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<TwilioSmsProvider> _logger;
+    private readonly HttpClient _httpClient;
+
+    public TwilioSmsProvider(IConfiguration configuration, ILogger<TwilioSmsProvider> logger, HttpClient? httpClient = null)
+    {
+        _configuration = configuration;
+        _logger = logger;
+        _httpClient = httpClient ?? new HttpClient();
+    }
+
+    public async Task<CommunicationResult> SendSmsAsync(string recipientPhone, string message, string eventType, int? orderId = null)
+    {
+        var accountSid = _configuration["Notification:Sms:Twilio:AccountSid"] ?? _configuration["TWILIO_ACCOUNT_SID"];
+        var authToken = _configuration["Notification:Sms:Twilio:AuthToken"] ?? _configuration["TWILIO_AUTH_TOKEN"];
+        var fromNumber = _configuration["Notification:Sms:FromNumber"] ?? _configuration["NOTIFICATION_SMS_FROM"] ?? "+18005550199";
+
+        if (string.IsNullOrWhiteSpace(accountSid) || string.IsNullOrWhiteSpace(authToken) || accountSid.StartsWith("your_"))
+        {
+            _logger.LogInformation("[TWILIO SIMULATION] Account SID unconfigured. Simulating SMS to {Phone}: {Message}", recipientPhone, message);
+            return CommunicationResult.Ok("TwilioSmsProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
+        }
+
+        try
+        {
+            var requestUrl = $"https://api.twilio.com/2010-04-01/Accounts/{accountSid}/Messages.json";
+            var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
+            var byteArray = System.Text.Encoding.ASCII.GetBytes($"{accountSid}:{authToken}");
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
+
+            var formContent = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("To", recipientPhone),
+                new KeyValuePair<string, string>("From", fromNumber),
+                new KeyValuePair<string, string>("Body", message)
+            });
+            request.Content = formContent;
+
+            var response = await _httpClient.SendAsync(request);
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("[TWILIO SUCCESS] Real SMS dispatched to {Phone} for order {OrderId}", recipientPhone, orderId);
+                return CommunicationResult.Ok("TwilioSmsProvider", Guid.NewGuid().ToString("N")[..8]);
+            }
+
+            var errorBody = await response.Content.ReadAsStringAsync();
+            _logger.LogError("Twilio API error: {Error}", errorBody);
+            return CommunicationResult.Fail("TwilioSmsProvider", $"HTTP {response.StatusCode}: {errorBody}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send Twilio SMS to {Phone}", recipientPhone);
+            return CommunicationResult.Fail("TwilioSmsProvider", ex.Message);
+        }
     }
 }
