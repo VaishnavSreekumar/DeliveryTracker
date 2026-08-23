@@ -37,6 +37,7 @@ public class AuthService : IAuthService
         {
             FullName = request.FullName,
             Email = request.Email.ToLower(),
+            PhoneNumber = request.PhoneNumber,
             Role = UserRole.Customer, // Public registration is strictly Customer
             CreatedAt = DateTime.UtcNow
         };
@@ -56,6 +57,7 @@ public class AuthService : IAuthService
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
                 Role = user.Role
             }
         };
@@ -88,6 +90,7 @@ public class AuthService : IAuthService
                 Id = user.Id,
                 FullName = user.FullName,
                 Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
                 Role = user.Role
             }
         };

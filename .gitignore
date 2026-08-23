@@ -21,5 +21,8 @@ dist/
 # OS / IDE generated files
 .DS_Store
 Thumbs.db
-.idea/
-.vscode/
+# Environment files
+.env
+.env.local
+.env.*.local
+*.env

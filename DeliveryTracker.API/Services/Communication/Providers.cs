@@ -42,6 +42,13 @@ public class SmtpEmailProvider : IEmailNotificationProvider
             return CommunicationResult.Ok("SmtpEmailProvider(Disabled)", "DISABLED");
         }
 
+        var mode = _configuration["NOTIFICATION_MODE"] ?? _configuration["Notification:Mode"] ?? "Real";
+        if (mode.Equals("Simulation", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("[SMTP SIMULATION] Explicit simulation mode. Simulating email to {Recipient}: {Subject}", recipientEmail, subject);
+            return CommunicationResult.Ok("SmtpEmailProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
+        }
+
         var host = _configuration["Notification:Email:Smtp:Host"] ?? _configuration["SMTP_HOST"];
         var portStr = _configuration["Notification:Email:Smtp:Port"] ?? _configuration["SMTP_PORT"];
         var username = _configuration["Notification:Email:Smtp:Username"] ?? _configuration["SMTP_USERNAME"];
@@ -50,8 +57,8 @@ public class SmtpEmailProvider : IEmailNotificationProvider
 
         if (string.IsNullOrWhiteSpace(host) || !int.TryParse(portStr, out int port) || string.IsNullOrWhiteSpace(username) || username.StartsWith("your_"))
         {
-            _logger.LogInformation("[SMTP SIMULATION] Credentials unconfigured. Simulating email to {Recipient}: {Subject}", recipientEmail, subject);
-            return CommunicationResult.Ok("SmtpEmailProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
+            _logger.LogWarning("SMTP credentials unconfigured in Real notification mode.");
+            return CommunicationResult.Fail("SmtpEmailProvider", "SMTP credentials not configured for Real notification mode.");
         }
 
         try
@@ -118,14 +125,21 @@ public class TwilioSmsProvider : ISmsNotificationProvider
             return CommunicationResult.Ok("TwilioSmsProvider(Disabled)", "DISABLED");
         }
 
+        var mode = _configuration["NOTIFICATION_MODE"] ?? _configuration["Notification:Mode"] ?? "Real";
+        if (mode.Equals("Simulation", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("[TWILIO SIMULATION] Explicit simulation mode. Simulating SMS to {Phone}: {Message}", recipientPhone, message);
+            return CommunicationResult.Ok("TwilioSmsProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
+        }
+
         var accountSid = _configuration["Notification:Sms:Twilio:AccountSid"] ?? _configuration["TWILIO_ACCOUNT_SID"];
         var authToken = _configuration["Notification:Sms:Twilio:AuthToken"] ?? _configuration["TWILIO_AUTH_TOKEN"];
         var fromNumber = _configuration["Notification:Sms:FromNumber"] ?? _configuration["TWILIO_FROM_NUMBER"] ?? _configuration["NOTIFICATION_SMS_FROM"] ?? "+18005550199";
 
         if (string.IsNullOrWhiteSpace(accountSid) || string.IsNullOrWhiteSpace(authToken) || accountSid.StartsWith("your_"))
         {
-            _logger.LogInformation("[TWILIO SIMULATION] Account SID unconfigured. Simulating SMS to {Phone}: {Message}", recipientPhone, message);
-            return CommunicationResult.Ok("TwilioSmsProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
+            _logger.LogWarning("Twilio credentials unconfigured in Real notification mode.");
+            return CommunicationResult.Fail("TwilioSmsProvider", "Twilio credentials not configured for Real notification mode.");
         }
 
         try

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using DeliveryTracker.API.Controllers;
 using DeliveryTracker.API.Data;
@@ -26,10 +27,10 @@ public class CommunicationNotificationTests
         var context = new AppDbContext(options);
 
         // Seed Users
-        var adminUser = new User { Id = 1, FullName = "Admin User", Email = "admin@delivery.com", PasswordHash = "dev", Role = UserRole.Admin };
-        var custUser = new User { Id = 2, FullName = "Customer Alice", Email = "alice@delivery.com", PasswordHash = "dev", Role = UserRole.Customer };
-        var otherCust = new User { Id = 3, FullName = "Customer Bob", Email = "bob@delivery.com", PasswordHash = "dev", Role = UserRole.Customer };
-        var agentUser = new User { Id = 101, FullName = "Agent One", Email = "agent1@delivery.com", PasswordHash = "dev", Role = UserRole.Agent };
+        var adminUser = new User { Id = 1, FullName = "Admin User", Email = "admin@delivery.com", PhoneNumber = "+18005550100", PasswordHash = "dev", Role = UserRole.Admin };
+        var custUser = new User { Id = 2, FullName = "Customer Alice", Email = "alice@delivery.com", PhoneNumber = "+919876543210", PasswordHash = "dev", Role = UserRole.Customer };
+        var otherCust = new User { Id = 3, FullName = "Customer Bob", Email = "bob@delivery.com", PhoneNumber = "+919876543299", PasswordHash = "dev", Role = UserRole.Customer };
+        var agentUser = new User { Id = 101, FullName = "Agent One", Email = "agent1@delivery.com", PhoneNumber = "+919876543211", PasswordHash = "dev", Role = UserRole.Agent };
         context.Users.AddRange(adminUser, custUser, otherCust, agentUser);
 
         // Seed Zones & Areas
@@ -273,9 +274,54 @@ public class CommunicationNotificationTests
     }
 
     [Fact]
-    public async Task Test6_AdminCanInspect_OrderCommunicationLogs()
+    public async Task Test6_MissingRealModeConfiguration_ReturnsFailedDeliveryStatus()
     {
-        var db = GetInMemoryDbContext(nameof(Test6_AdminCanInspect_OrderCommunicationLogs));
+        var inMemoryConfig = new Dictionary<string, string?>
+        {
+            {"NOTIFICATION_MODE", "Real"},
+            {"SMTP_HOST", ""},
+            {"TWILIO_ACCOUNT_SID", ""}
+        };
+        var config = new ConfigurationBuilder().AddInMemoryCollection(inMemoryConfig).Build();
+
+        var smtpProvider = new SmtpEmailProvider(config, NullLogger<SmtpEmailProvider>.Instance);
+        var twilioProvider = new TwilioSmsProvider(config, NullLogger<TwilioSmsProvider>.Instance);
+
+        var emailRes = await smtpProvider.SendEmailAsync("test@example.com", "Test Subject", "Test Body", "OrderCreated", 1);
+        Assert.False(emailRes.Success);
+        Assert.Contains("credentials", emailRes.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+
+        var smsRes = await twilioProvider.SendSmsAsync("+919876543210", "Test SMS", "OrderCreated", 1);
+        Assert.False(smsRes.Success);
+        Assert.Contains("credentials", smsRes.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Test7_CustomerPhoneAndEmail_ResolvedFromUserProfile()
+    {
+        var db = GetInMemoryDbContext(nameof(Test7_CustomerPhoneAndEmail_ResolvedFromUserProfile));
+        var liveEmail = new LiveSuccessfulEmailProvider();
+        var liveSms = new LiveSuccessfulSmsProvider();
+        var notifService = new NotificationService(db, liveEmail, liveSms);
+
+        db.Orders.Add(new Order { Id = 60, TrackingNumber = "LM-ORDER-60", CustomerId = 2, PickupAreaId = 1, DropAreaId = 1 });
+        await db.SaveChangesAsync();
+
+        await notifService.NotifyCustomerAsync(2, 60, "LM-ORDER-60", "OrderCreated", "Order Placed", "Your order was placed");
+
+        var smsLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 60 && n.Channel == CommunicationChannel.Sms);
+        Assert.NotNull(smsLog);
+        Assert.Equal("+919876543210", smsLog.RecipientPhone);
+
+        var emailLog = await db.Notifications.FirstOrDefaultAsync(n => n.OrderId == 60 && n.Channel == CommunicationChannel.Email);
+        Assert.NotNull(emailLog);
+        Assert.Equal("alice@delivery.com", emailLog.RecipientEmail);
+    }
+
+    [Fact]
+    public async Task Test8_AdminCanInspect_OrderCommunicationLogs()
+    {
+        var db = GetInMemoryDbContext(nameof(Test8_AdminCanInspect_OrderCommunicationLogs));
         var emailProvider = new DevelopmentEmailProvider(NullLogger<DevelopmentEmailProvider>.Instance);
         var smsProvider = new DevelopmentSmsProvider(NullLogger<DevelopmentSmsProvider>.Instance);
         var notifService = new NotificationService(db, emailProvider, smsProvider);

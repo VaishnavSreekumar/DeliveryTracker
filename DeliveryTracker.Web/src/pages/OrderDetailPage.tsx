@@ -349,8 +349,8 @@ export const OrderDetailPage: React.FC<OrderDetailPageProps> = ({ orderId, onBac
                           borderRadius: '3px',
                           fontSize: '0.7rem',
                           fontWeight: 600,
-                          backgroundColor: c.deliveryStatus === 'Failed' ? 'rgba(244, 63, 94, 0.2)' : 'rgba(34, 197, 94, 0.2)',
-                          color: c.deliveryStatus === 'Failed' ? '#fb7185' : '#4ade80'
+                          backgroundColor: c.deliveryStatus === 'Failed' ? 'rgba(244, 63, 94, 0.2)' : c.deliveryStatus === 'Simulated' ? 'rgba(245, 158, 11, 0.2)' : 'rgba(34, 197, 94, 0.2)',
+                          color: c.deliveryStatus === 'Failed' ? '#fb7185' : c.deliveryStatus === 'Simulated' ? '#fbbf24' : '#4ade80'
                         }}>
                           {c.deliveryStatus || 'Sent'}
                         </span>

@@ -35,13 +35,16 @@ public class NotificationService : INotificationService
     {
         var now = DateTime.UtcNow;
 
-        // Resolve Email & Phone from user if not explicitly passed
+        // Resolve Email & Phone from authenticated user profile
+        var user = await _context.Users.FindAsync(userId);
         if (string.IsNullOrWhiteSpace(recipientEmail))
         {
-            var user = await _context.Users.FindAsync(userId);
             recipientEmail = user?.Email ?? "customer@delivery.com";
         }
-        recipientPhone ??= "+91 98765 43210";
+        if (string.IsNullOrWhiteSpace(recipientPhone))
+        {
+            recipientPhone = user?.PhoneNumber ?? "+91 98765 43210";
+        }
 
         var notificationsToSave = new List<Notification>();
 
@@ -72,13 +75,19 @@ public class NotificationService : INotificationService
         CommunicationResult emailResult;
         try
         {
-            string emailSubject = $"[DeliveryTracker] {title}";
+            string emailSubject = $"DeliveryTracker — Order {trackingNumber} ({title})";
             string emailBody = $@"
-                <h3>Delivery Update: {trackingNumber}</h3>
-                <p><strong>Status Event:</strong> {eventType}</p>
-                <p>{message}</p>
-                <hr/>
-                <p><small>Track live at DeliveryTracker platform</small></p>";
+                <div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;'>
+                    <h2 style='color: #2563eb; margin-top: 0;'>DeliveryTracker Update</h2>
+                    <p>Dear <strong>{user?.FullName ?? "Customer"}</strong>,</p>
+                    <div style='background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 15px 0;'>
+                        <p style='margin: 5px 0;'><strong>Tracking Number:</strong> {trackingNumber}</p>
+                        <p style='margin: 5px 0;'><strong>Status:</strong> {title}</p>
+                        <p style='margin: 5px 0;'><strong>Update:</strong> {message}</p>
+                        <p style='margin: 5px 0; color: #64748b; font-size: 12px;'><strong>Timestamp:</strong> {now:yyyy-MM-dd HH:mm:ss} UTC</p>
+                    </div>
+                    <p>Track your shipment in real time on the <a href='http://localhost:5173' style='color: #2563eb; font-weight: bold;'>DeliveryTracker Portal</a>.</p>
+                </div>";
 
             emailResult = await _emailProvider.SendEmailAsync(recipientEmail, emailSubject, emailBody, eventType, orderId);
         }
@@ -116,7 +125,7 @@ public class NotificationService : INotificationService
             CommunicationResult smsResult;
             try
             {
-                string smsMessage = $"[DeliveryTracker] Order {trackingNumber}: {message}";
+                string smsMessage = FormatSmsMessage(trackingNumber, eventType, message);
                 smsResult = await _smsProvider.SendSmsAsync(recipientPhone, smsMessage, eventType, orderId);
             }
             catch (Exception ex)
@@ -184,6 +193,21 @@ public class NotificationService : INotificationService
             .ToListAsync();
 
         return logs.Select(MapToDto);
+    }
+
+    private static string FormatSmsMessage(string trackingNumber, string eventType, string message)
+    {
+        return eventType switch
+        {
+            "OutForDelivery" => $"DeliveryTracker: Order {trackingNumber} is now Out for Delivery. Track your delivery in DeliveryTracker.",
+            "DeliveryFailed" => $"DeliveryTracker: Delivery attempt for {trackingNumber} failed. Reason: {message}. Please open DeliveryTracker to reschedule.",
+            "OrderDelivered" => $"DeliveryTracker: Order {trackingNumber} has been delivered successfully.",
+            "OrderCreated" => $"DeliveryTracker: Order {trackingNumber} has been placed successfully.",
+            "PickedUp" => $"DeliveryTracker: Order {trackingNumber} has been picked up from origin.",
+            "InTransit" => $"DeliveryTracker: Order {trackingNumber} is now in transit.",
+            "OrderRescheduled" => $"DeliveryTracker: Order {trackingNumber} has been rescheduled.",
+            _ => $"DeliveryTracker: Order {trackingNumber} status update: {message}"
+        };
     }
 
     private static bool ShouldSendSmsForEvent(string eventType)

@@ -7,7 +7,7 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<User>;
-  register: (fullName: string, email: string, password: string) => Promise<User>;
+  register: (fullName: string, email: string, password: string, phoneNumber?: string) => Promise<User>;
   logout: () => void;
 }
 
@@ -51,13 +51,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (fullName: string, email: string, password: string): Promise<User> => {
+  const register = async (fullName: string, email: string, password: string, phoneNumber?: string): Promise<User> => {
     setIsLoading(true);
     try {
       const response = await apiClient.post<AuthResponse>('/auth/register', {
         fullName,
         email,
         password,
+        phoneNumber: phoneNumber || undefined,
       });
       setUser(response.user);
       setToken(response.token);

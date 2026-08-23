@@ -69,6 +69,7 @@ public static class DbInitializer
             {
                 FullName = "System Admin",
                 Email = "admin@delivery.com",
+                PhoneNumber = "+18005550100",
                 Role = UserRole.Admin,
                 CreatedAt = DateTime.UtcNow
             };
@@ -78,6 +79,7 @@ public static class DbInitializer
             {
                 FullName = "John Customer",
                 Email = "customer@delivery.com",
+                PhoneNumber = "+919876543210",
                 Role = UserRole.Customer,
                 CreatedAt = DateTime.UtcNow
             };
@@ -87,6 +89,7 @@ public static class DbInitializer
             {
                 FullName = "Raj Agent",
                 Email = "agent1@delivery.com",
+                PhoneNumber = "+919876543211",
                 Role = UserRole.Agent,
                 CreatedAt = DateTime.UtcNow
             };
@@ -96,6 +99,7 @@ public static class DbInitializer
             {
                 FullName = "Vikram Agent",
                 Email = "agent2@delivery.com",
+                PhoneNumber = "+919876543212",
                 Role = UserRole.Agent,
                 CreatedAt = DateTime.UtcNow
             };

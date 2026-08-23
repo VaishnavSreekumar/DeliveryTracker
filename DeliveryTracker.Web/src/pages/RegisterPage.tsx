@@ -10,6 +10,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateLogin }) =
   const { register } = useAuth();
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +21,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateLogin }) =
     setError(null);
 
     try {
-      await register(fullName, email, password);
+      await register(fullName, email, password, phoneNumber);
     } catch (err: any) {
       setError(err.message || 'Registration failed.');
     } finally {
@@ -94,7 +95,7 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateLogin }) =
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
-            <label className="label">Email Address</label>
+            <label className="label">Email Address (for Email Notifications)</label>
             <input
               type="email"
               className="input-field"
@@ -102,6 +103,17 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateLogin }) =
               onChange={(e) => setEmail(e.target.value)}
               placeholder="e.g. sarah@example.com"
               required
+            />
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            <label className="label">Phone Number (for SMS Notifications)</label>
+            <input
+              type="tel"
+              className="input-field"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="e.g. +91 98765 43210 (E.164 format)"
             />
           </div>
 
