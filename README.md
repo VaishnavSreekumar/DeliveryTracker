@@ -84,6 +84,7 @@ Every status transition is permanently recorded in an immutable tracking history
 - Track real-time delivery history and assigned delivery agent
 - Inspect package dimensions, chargeable weight, and fee breakdown
 - Reschedule failed deliveries for future dates
+- Receive real-time failure & reschedule notifications via Notification Center dropdown
 
 ## Delivery Agent
 - Login using JWT
@@ -428,7 +429,7 @@ Key views include:
 - **Backend**: C# / .NET 10, ASP.NET Core Web API
 - **Data Access**: Entity Framework Core 10, SQLite
 - **Security**: JWT Bearer (`Microsoft.AspNetCore.Authentication.JwtBearer`), `PasswordHasher<User>`
-- **Testing**: xUnit test framework (55 automated tests)
+- **Testing**: xUnit test framework (69 automated tests)
 - **Frontend**: React 19, TypeScript, Vite, Lucide React, Vanilla CSS design tokens
 
 ---
@@ -438,23 +439,25 @@ Key views include:
 ```text
 DeliveryTracker/
 ├── DeliveryTracker.API/            # ASP.NET Core Web API
-│   ├── Controllers/               # REST API Endpoints
+│   ├── Controllers/               # Auth, Orders, Pricing, Notifications, Zones
 │   ├── Data/                      # DbContext & EF Migrations
 │   ├── DTOs/                      # Request & Response Contracts
-│   ├── Models/                    # Entity Models
+│   ├── Entities/                  # Domain Models (Order, Agent, User, Notification, etc.)
 │   ├── Services/                  # Business Logic & Algorithms
 │   ├── appsettings.json           # JWT & DB Configuration
 │   └── Program.cs                 # DI & Pipeline Setup
-├── DeliveryTracker.Tests/          # xUnit Test Suite (55 Tests)
+├── DeliveryTracker.Tests/          # xUnit Test Suite (69 Tests)
 │   ├── AuthServiceTests.cs
 │   ├── DeliveryRecoveryServiceTests.cs
 │   ├── OrderStatusServiceTests.cs
 │   ├── PricingServiceTests.cs
-│   └── AgentAssignmentServiceTests.cs
+│   ├── AgentAssignmentServiceTests.cs
+│   ├── NotificationTests.cs
+│   └── OrderServiceTests.cs
 └── DeliveryTracker.Web/            # React + TypeScript Frontend
     ├── src/
     │   ├── api/                   # Centralized API Client
-    │   ├── components/            # Timeline, StatusBadge, Layout, Modals
+    │   ├── components/            # Timeline, StatusBadge, Layout, NotificationCenter, Modals
     │   ├── context/               # AuthContext
     │   ├── pages/                 # Booking, Detail, Console, Auth
     │   └── types/                 # Domain Interfaces

@@ -262,4 +262,150 @@ public class OrderServiceTests
         Assert.Equal(0, await db.Orders.CountAsync());
         Assert.Equal(0, await db.OrderStatusHistories.CountAsync());
     }
+
+    [Fact]
+    public async Task Test7_GetOrders_CustomerScoping_ReturnsOnlyCustomerOrders()
+    {
+        // Arrange
+        var db = GetInMemoryDbContext(nameof(Test7_GetOrders_CustomerScoping_ReturnsOnlyCustomerOrders));
+        var userB = new User { Id = 3, FullName = "Jane Customer", Email = "jane@delivery.com", PasswordHash = "dev", Role = UserRole.Customer };
+        db.Users.Add(userB);
+
+        var orderA = new Order { Id = 1, TrackingNumber = "LM-ORD-A", CustomerId = 2, PickupAreaId = 1, DropAreaId = 2, TotalAmount = 200, Status = OrderStatus.Created };
+        var orderB = new Order { Id = 2, TrackingNumber = "LM-ORD-B", CustomerId = 3, PickupAreaId = 1, DropAreaId = 2, TotalAmount = 300, Status = OrderStatus.Created };
+        db.Orders.AddRange(orderA, orderB);
+        await db.SaveChangesAsync();
+
+        var pricingService = new PricingService(db);
+        var orderService = new OrderService(db, pricingService);
+
+        // Act: Get orders for Customer ID 2
+        var customerOrders = (await orderService.GetOrdersAsync(customerId: 2)).ToList();
+
+        // Assert
+        Assert.Single(customerOrders);
+        Assert.Equal("LM-ORD-A", customerOrders[0].TrackingNumber);
+        Assert.Equal(2, customerOrders[0].CustomerId);
+    }
+
+    [Fact]
+    public async Task Test8_GetOrders_AdminGlobalVisibility_ReturnsAllOrders()
+    {
+        // Arrange
+        var db = GetInMemoryDbContext(nameof(Test8_GetOrders_AdminGlobalVisibility_ReturnsAllOrders));
+        var userB = new User { Id = 3, FullName = "Jane Customer", Email = "jane@delivery.com", PasswordHash = "dev", Role = UserRole.Customer };
+        db.Users.Add(userB);
+
+        var orderA = new Order { Id = 1, TrackingNumber = "LM-ORD-A", CustomerId = 2, PickupAreaId = 1, DropAreaId = 2, TotalAmount = 200, Status = OrderStatus.Created };
+        var orderB = new Order { Id = 2, TrackingNumber = "LM-ORD-B", CustomerId = 3, PickupAreaId = 1, DropAreaId = 2, TotalAmount = 300, Status = OrderStatus.Created };
+        db.Orders.AddRange(orderA, orderB);
+        await db.SaveChangesAsync();
+
+        var pricingService = new PricingService(db);
+        var orderService = new OrderService(db, pricingService);
+
+        // Act: Get all orders (no customerId passed, admin query)
+        var allOrders = (await orderService.GetOrdersAsync(customerId: null)).ToList();
+
+        // Assert
+        Assert.Equal(2, allOrders.Count);
+    }
+
+    [Fact]
+    public async Task Test9_GetOrderById_ReturnsCompleteOrderDetailsWithHistory()
+    {
+        // Arrange
+        var db = GetInMemoryDbContext(nameof(Test9_GetOrderById_ReturnsCompleteOrderDetailsWithHistory));
+        var order = new Order
+        {
+            Id = 10,
+            TrackingNumber = "LM-DETAIL-001",
+            CustomerId = 2,
+            PickupAreaId = 1,
+            DropAreaId = 3,
+            PickupAddress = "Colaba 1",
+            DropAddress = "Andheri 2",
+            TotalAmount = 500,
+            Status = OrderStatus.Created,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        db.Orders.Add(order);
+        db.OrderStatusHistories.Add(new OrderStatusHistory
+        {
+            OrderId = 10,
+            Status = OrderStatus.Created,
+            ActorId = 2,
+            ActorRole = UserRole.Customer,
+            Notes = "Order placed",
+            Timestamp = DateTime.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var pricingService = new PricingService(db);
+        var orderService = new OrderService(db, pricingService);
+
+        // Act
+        var result = await orderService.GetOrderByIdAsync(10);
+
+        // Assert
+        Assert.NotNull(result);
+        Assert.Equal("LM-DETAIL-001", result.TrackingNumber);
+        Assert.Equal("John Customer", result.CustomerName);
+        Assert.Equal("Colaba", result.PickupArea);
+        Assert.Equal("Andheri", result.DropArea);
+        Assert.Single(result.StatusHistory);
+    }
+
+    [Fact]
+    public async Task Test10_InvalidCustomerId_ThrowsKeyNotFoundException()
+    {
+        // Arrange
+        var db = GetInMemoryDbContext(nameof(Test10_InvalidCustomerId_ThrowsKeyNotFoundException));
+        var pricingService = new PricingService(db);
+        var orderService = new OrderService(db, pricingService);
+
+        var request = new CreateOrderRequest
+        {
+            CustomerId = 9999, // Non-existent user
+            PickupAreaId = 1,
+            DropAreaId = 3,
+            Length = 10,
+            Breadth = 10,
+            Height = 10,
+            ActualWeight = 2.0m,
+            OrderType = OrderType.B2C,
+            PaymentType = PaymentType.Prepaid
+        };
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<KeyNotFoundException>(() => orderService.CreateOrderAsync(request));
+        Assert.Contains("Customer with ID 9999 not found", ex.Message);
+    }
+
+    [Fact]
+    public async Task Test11_InvalidDropArea_ThrowsKeyNotFoundException()
+    {
+        // Arrange
+        var db = GetInMemoryDbContext(nameof(Test11_InvalidDropArea_ThrowsKeyNotFoundException));
+        var pricingService = new PricingService(db);
+        var orderService = new OrderService(db, pricingService);
+
+        var request = new CreateOrderRequest
+        {
+            CustomerId = 2,
+            PickupAreaId = 1,
+            DropAreaId = 8888, // Non-existent drop area
+            Length = 10,
+            Breadth = 10,
+            Height = 10,
+            ActualWeight = 2.0m,
+            OrderType = OrderType.B2C,
+            PaymentType = PaymentType.Prepaid
+        };
+
+        // Act & Assert
+        var ex = await Assert.ThrowsAsync<KeyNotFoundException>(() => orderService.CreateOrderAsync(request));
+        Assert.Contains("Drop area with ID 8888 not found", ex.Message);
+    }
 }
