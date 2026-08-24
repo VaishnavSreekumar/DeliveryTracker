@@ -1,5 +1,6 @@
-using System.Net;
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
+using MimeKit;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -49,11 +50,12 @@ public class SmtpEmailProvider : IEmailNotificationProvider
             return CommunicationResult.Ok("SmtpEmailProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
         }
 
-        var host = GetConfig("Notification:Email:Smtp:Host", "SMTP_HOST");
+        var host = GetConfig("Notification:Email:Smtp:Host", "SMTP_HOST") ?? "smtp.gmail.com";
         var portStr = GetConfig("Notification:Email:Smtp:Port", "SMTP_PORT") ?? "587";
         var username = GetConfig("Notification:Email:Smtp:Username", "SMTP_USERNAME");
         var password = GetConfig("Notification:Email:Smtp:Password", "SMTP_PASSWORD");
-        var fromAddress = GetConfig("Notification:Email:FromAddress", "SMTP_FROM") ?? GetConfig("NOTIFICATION_EMAIL_FROM", "NOTIFICATION_EMAIL_FROM") ?? "notifications@deliverytracker.com";
+        var fromAddress = GetConfig("Notification:Email:FromAddress", "SMTP_FROM") ?? GetConfig("NOTIFICATION_EMAIL_FROM", "NOTIFICATION_EMAIL_FROM") ?? username ?? "notifications@deliverytracker.com";
+        var fromName = GetConfig("Notification:Email:FromName", "SMTP_FROM_NAME") ?? "DeliveryTracker Dispatch";
 
         int port = 587;
         bool isConfigured = !string.IsNullOrWhiteSpace(host)
@@ -75,24 +77,60 @@ public class SmtpEmailProvider : IEmailNotificationProvider
 
         try
         {
-            using var client = new SmtpClient(host, port)
-            {
-                EnableSsl = true,
-                Timeout = 15000,
-                Credentials = new NetworkCredential(username, password)
-            };
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress(fromName, fromAddress));
+            message.To.Add(new MailboxAddress(recipientEmail, recipientEmail));
+            message.Subject = subject;
 
-            var mail = new MailMessage(fromAddress, recipientEmail, subject, body)
-            {
-                IsBodyHtml = true
-            };
+            var bodyBuilder = new BodyBuilder { HtmlBody = body };
+            message.Body = bodyBuilder.ToMessageBody();
 
-            await client.SendMailAsync(mail);
+            using var client = new SmtpClient();
+            client.Timeout = 10000;
+
+            SecureSocketOptions socketOptions = port == 465
+                ? SecureSocketOptions.SslOnConnect
+                : SecureSocketOptions.StartTlsWhenAvailable;
+
+            await client.ConnectAsync(host, port, socketOptions);
+            await client.AuthenticateAsync(username, password);
+            await client.SendAsync(message);
+            await client.DisconnectAsync(true);
+
             _logger.LogInformation("[SMTP SUCCESS] Real email sent to {Recipient} for order {OrderId}", recipientEmail, orderId);
             return CommunicationResult.Ok("SmtpEmailProvider", Guid.NewGuid().ToString("N")[..8]);
         }
         catch (Exception ex)
         {
+            // If port 587 failed, attempt port 465 SSL connection fallback for cloud container compatibility
+            if (port != 465)
+            {
+                try
+                {
+                    var message = new MimeMessage();
+                    message.From.Add(new MailboxAddress(fromName, fromAddress));
+                    message.To.Add(new MailboxAddress(recipientEmail, recipientEmail));
+                    message.Subject = subject;
+
+                    var bodyBuilder = new BodyBuilder { HtmlBody = body };
+                    message.Body = bodyBuilder.ToMessageBody();
+
+                    using var fallbackClient = new SmtpClient();
+                    fallbackClient.Timeout = 10000;
+                    await fallbackClient.ConnectAsync(host, 465, SecureSocketOptions.SslOnConnect);
+                    await fallbackClient.AuthenticateAsync(username, password);
+                    await fallbackClient.SendAsync(message);
+                    await fallbackClient.DisconnectAsync(true);
+
+                    _logger.LogInformation("[SMTP SUCCESS (SSL 465)] Real email sent to {Recipient} for order {OrderId}", recipientEmail, orderId);
+                    return CommunicationResult.Ok("SmtpEmailProvider(SSL-465)", Guid.NewGuid().ToString("N")[..8]);
+                }
+                catch (Exception fallbackEx)
+                {
+                    _logger.LogError(fallbackEx, "SMTP SSL 465 fallback failed for {Recipient}", recipientEmail);
+                }
+            }
+
             _logger.LogError(ex, "Failed to send real SMTP email to {Recipient}", recipientEmail);
             return CommunicationResult.Fail("SmtpEmailProvider", ex.Message);
         }
