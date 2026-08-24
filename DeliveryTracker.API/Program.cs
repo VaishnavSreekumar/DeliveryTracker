@@ -115,7 +115,22 @@ builder.Services.AddCors(options =>
 
 // Register Services
 builder.Services.AddScoped<IPricingService, PricingService>();
-builder.Services.AddScoped<IEmailNotificationProvider, SmtpEmailProvider>();
+
+// Email Provider Selection: HTTP (Resend HTTPS API for production) vs SMTP (Local development)
+var emailProviderType = Environment.GetEnvironmentVariable("EMAIL_PROVIDER") 
+    ?? builder.Configuration["Notification:Email:Provider"] 
+    ?? "SMTP";
+
+if (emailProviderType.Equals("HTTP", StringComparison.OrdinalIgnoreCase) 
+    || emailProviderType.Equals("RESEND", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<IEmailNotificationProvider, ResendEmailProvider>();
+}
+else
+{
+    builder.Services.AddScoped<IEmailNotificationProvider, SmtpEmailProvider>();
+}
+
 builder.Services.AddScoped<ISmsNotificationProvider, TwilioSmsProvider>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
