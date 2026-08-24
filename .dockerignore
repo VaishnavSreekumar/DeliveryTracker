@@ -1,0 +1,11 @@
+**/.git
+**/.env.local
+**/.env
+**/bin
+**/obj
+**/dist
+**/node_modules
+**/*.db
+**/*.db-shm
+**/*.db-wal
+**/logs

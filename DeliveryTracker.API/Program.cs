@@ -26,7 +26,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Configure SQLite DbContext
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
+var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+    ?? builder.Configuration.GetConnectionString("DefaultConnection") 
     ?? "Data Source=delivery.db";
 
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -60,11 +61,28 @@ builder.Services.AddAuthentication(options =>
 
 builder.Services.AddAuthorization();
 
-// Configure CORS for React frontend client
+// Configure CORS for React frontend client (Development + Production Vercel domain)
+var allowedOriginsEnv = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS") 
+    ?? builder.Configuration["Cors:AllowedOrigins"] 
+    ?? "";
+
+var allowedOrigins = new List<string> { "http://localhost:5173", "http://localhost:3000" };
+if (!string.IsNullOrWhiteSpace(allowedOriginsEnv))
+{
+    var extraOrigins = allowedOriginsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    foreach (var o in extraOrigins)
+    {
+        if (!allowedOrigins.Contains(o, StringComparer.OrdinalIgnoreCase))
+        {
+            allowedOrigins.Add(o);
+        }
+    }
+}
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+        policy.WithOrigins(allowedOrigins.ToArray())
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials());
@@ -100,11 +118,27 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// Lightweight Health Check Endpoint for Render / zero-downtime monitoring
+app.MapGet("/api/health", () => Results.Ok(new 
+{ 
+    status = "healthy", 
+    service = "DeliveryTracker.API", 
+    timestamp = DateTime.UtcNow,
+    environment = app.Environment.EnvironmentName
+}));
+
 // Initialize database with migrations and seed data
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     DbInitializer.Initialize(dbContext);
+}
+
+// Bind to Render PORT if set and no URLs explicitly configured
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port) && !app.Urls.Any())
+{
+    app.Urls.Add($"http://0.0.0.0:{port}");
 }
 
 app.Run();

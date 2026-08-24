@@ -592,3 +592,38 @@ To experience the full business lifecycle:
 - **Immutable Status Audit Trail**: Status changes are recorded in append-only `OrderStatusHistory` table rather than updating inline strings.
 - **Failure-Safe Communication Abstraction**: `INotificationService` isolates provider calls inside try-catch boundaries, ensuring core operational transactions are never blocked by network latency or provider downtime.
 - **Operational UI Aesthetics**: Focused UI built with Vanilla CSS tokens, precise typography, dark slate palette, and zero generic marketing templates.
+
+---
+
+# Production Deployment Guide
+
+DeliveryTracker is designed for public cloud deployment using **Vercel** for the frontend SPA and **Render** for the containerized backend API.
+
+### 1. Backend Web Service (Render)
+- **Deployment Type**: Web Service (Docker runtime using root `Dockerfile`).
+- **Port Configuration**: Automatically binds to Render's dynamic `$PORT` environment variable (`http://0.0.0.0:${PORT}`).
+- **Database Persistence**: SQLite database runs by default on the filesystem. For permanent data persistence across service restarts and redeployments, attach a **Render Persistent Disk** (e.g. mount path `/var/data`) and set:
+  ```env
+  ConnectionStrings__DefaultConnection=Data Source=/var/data/delivery.db
+  ```
+- **Health Check Endpoint**: `/api/health`
+- **Environment Variables**: Configure on Render dashboard (see `.env.example`).
+
+### 2. Frontend Application (Vercel)
+- **Framework Preset**: Vite
+- **Root Directory**: `DeliveryTracker.Web`
+- **Build Command**: `npm run build`
+- **Output Directory**: `dist`
+- **SPA Routing**: Handled automatically via `DeliveryTracker.Web/vercel.json` rewrite fallback.
+- **Environment Variables**:
+  ```env
+  VITE_API_BASE_URL=https://<your-render-service-name>.onrender.com/api
+  ```
+
+### 3. Server-Side Environment Variables Reference
+All sensitive production credentials must be entered securely through hosting-provider dashboards and never committed to version control:
+- `ALLOWED_ORIGINS`: Comma-separated list of allowed frontend origins (e.g. `https://<your-project>.vercel.app`).
+- `Jwt__SecretKey`: Production signing key (minimum 32 characters).
+- `NOTIFICATION_MODE`: `Real` (or `Development` for simulated communication).
+- `EMAIL_ENABLED` / `SMTP_*`: Google Gmail SMTP credentials and App Password.
+- `SMS_ENABLED` / `TWILIO_*`: Twilio Account SID, API Key/Secret, and registered sender number.
