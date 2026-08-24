@@ -1,6 +1,6 @@
 # DeliveryTracker
 
-## 🚀 Live Application
+##  Live Application
 
 - **Frontend (Web Application)**: [https://delivery-tracker-weld.vercel.app/](https://delivery-tracker-weld.vercel.app/)
 - **Backend API Server**: [https://deliverytracker-bhmh.onrender.com](https://deliverytracker-bhmh.onrender.com)
