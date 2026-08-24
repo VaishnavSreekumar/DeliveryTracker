@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd DeliveryTracker.Web && npm run build",
+  "outputDirectory": "DeliveryTracker.Web/dist",
+  "installCommand": "cd DeliveryTracker.Web && npm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
