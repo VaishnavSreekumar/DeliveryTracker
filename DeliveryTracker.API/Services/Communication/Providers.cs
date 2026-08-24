@@ -209,11 +209,14 @@ public class TwilioSmsProvider : ISmsNotificationProvider
             var byteArray = System.Text.Encoding.ASCII.GetBytes($"{authUser}:{authSecret}");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", Convert.ToBase64String(byteArray));
 
+            var configuredTemplate = GetConfig("Notification:Sms:Twilio:TrialTemplate", "TWILIO_TRIAL_TEMPLATE");
+            var smsBody = !string.IsNullOrWhiteSpace(configuredTemplate) ? configuredTemplate : "sms_order_confirmation";
+
             var formContent = new FormUrlEncodedContent(new[]
             {
                 new KeyValuePair<string, string>("To", normalizedTo),
                 new KeyValuePair<string, string>("From", normalizedFrom),
-                new KeyValuePair<string, string>("Body", message)
+                new KeyValuePair<string, string>("Body", smsBody)
             });
             request.Content = formContent;
 
