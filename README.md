@@ -595,37 +595,41 @@ To experience the full business lifecycle:
 
 ---
 
-# Production Deployment Guide
+# Live Production Deployment
 
-DeliveryTracker is designed for public cloud deployment using **Vercel** for the frontend SPA and **Render** for the containerized backend API.
+DeliveryTracker is publicly deployed and operational using **Vercel** for the React frontend, **Render** for the containerized ASP.NET Core API, and **Render Free PostgreSQL** for persistence:
+
+- **Live Application (Frontend)**: [https://delivery-tracker-weld.vercel.app/](https://delivery-tracker-weld.vercel.app/)
+- **Live Backend API**: [https://deliverytracker-bhmh.onrender.com](https://deliverytracker-bhmh.onrender.com)
+- **Interactive Swagger Documentation**: [https://deliverytracker-bhmh.onrender.com/swagger](https://deliverytracker-bhmh.onrender.com/swagger)
+- **API Health Check**: [https://deliverytracker-bhmh.onrender.com/api/health](https://deliverytracker-bhmh.onrender.com/api/health)
+
+---
+
+# Production Architecture & Deployment Guide
 
 ### 1. Backend Web Service (Render)
 - **Deployment Type**: Web Service (Docker runtime using root `Dockerfile`).
-- **Database Engine (Production)**: **Render Free PostgreSQL** (or SQLite for zero-config testing).
+- **Live Service**: `https://deliverytracker-bhmh.onrender.com`
+- **Database Engine (Production)**: **Render Free PostgreSQL** (`Npgsql.EntityFrameworkCore.PostgreSQL`).
 - **Port Configuration**: Automatically binds to Render's dynamic `$PORT` environment variable (`http://0.0.0.0:${PORT}`).
-- **Database Connection**: Set Render Free PostgreSQL connection string:
-  ```env
-  ConnectionStrings__DefaultConnection=Host=<render-pg-host>;Port=5432;Database=<db>;Username=<user>;Password=<pass>;SSL Mode=Require;Trust Server Certificate=true
-  ```
-  *(Supports both standard ADO.NET and Render URL formats `postgres://user:pass@host:port/dbname`)*
 - **Health Check Endpoint**: `/api/health`
-- **Environment Variables**: Configure on Render dashboard (see `.env.example`).
+- **Environment Variables**:
+  - `ConnectionStrings__DefaultConnection`: Internal Render PostgreSQL connection URL.
+  - `ALLOWED_ORIGINS`: `https://delivery-tracker-weld.vercel.app,http://localhost:5173`.
+  - `Jwt__SecretKey`: Production JWT signing key.
+  - `NOTIFICATION_MODE`: `Real`.
+  - `EMAIL_ENABLED` / `SMTP_*`: Google Gmail SMTP provider credentials.
+  - `SMS_ENABLED` / `TWILIO_*`: Twilio REST API provider credentials.
 
 ### 2. Frontend Application (Vercel)
-- **Framework Preset**: Vite
+- **Deployment Type**: Vite SPA
+- **Live URL**: `https://delivery-tracker-weld.vercel.app/`
 - **Root Directory**: `DeliveryTracker.Web`
 - **Build Command**: `npm run build`
 - **Output Directory**: `dist`
-- **SPA Routing**: Handled automatically via `DeliveryTracker.Web/vercel.json` rewrite fallback.
-- **Environment Variables**:
+- **SPA Routing**: Handled automatically via root and subfolder `vercel.json` rewrite rules.
+- **Environment Variable**:
   ```env
-  VITE_API_BASE_URL=https://<your-render-service-name>.onrender.com/api
+  VITE_API_BASE_URL=https://deliverytracker-bhmh.onrender.com/api
   ```
-
-### 3. Server-Side Environment Variables Reference
-All sensitive production credentials must be entered securely through hosting-provider dashboards and never committed to version control:
-- `ALLOWED_ORIGINS`: Comma-separated list of allowed frontend origins (e.g. `https://<your-project>.vercel.app`).
-- `Jwt__SecretKey`: Production signing key (minimum 32 characters).
-- `NOTIFICATION_MODE`: `Real` (or `Development` for simulated communication).
-- `EMAIL_ENABLED` / `SMTP_*`: Google Gmail SMTP credentials and App Password.
-- `SMS_ENABLED` / `TWILIO_*`: Twilio Account SID, API Key/Secret, and registered sender number.
