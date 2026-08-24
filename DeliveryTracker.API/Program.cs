@@ -25,13 +25,29 @@ builder.Services.AddEndpointsApiExplorer();
 // Configure Swagger
 builder.Services.AddSwaggerGen();
 
-// Configure SQLite DbContext
-var connectionString = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+// Configure DbContext based on connection string (PostgreSQL in production, SQLite in local dev)
+var rawConnStr = Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
     ?? builder.Configuration.GetConnectionString("DefaultConnection") 
+    ?? Environment.GetEnvironmentVariable("DATABASE_URL")
     ?? "Data Source=delivery.db";
 
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite(connectionString));
+bool isPostgres = rawConnStr.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) 
+    || rawConnStr.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase)
+    || rawConnStr.Contains("Host=", StringComparison.OrdinalIgnoreCase)
+    || rawConnStr.Contains("Server=", StringComparison.OrdinalIgnoreCase)
+    || string.Equals(Environment.GetEnvironmentVariable("DB_PROVIDER"), "PostgreSQL", StringComparison.OrdinalIgnoreCase);
+
+if (isPostgres)
+{
+    var postgresConnStr = ConvertPostgresUrlToConnectionString(rawConnStr);
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseNpgsql(postgresConnStr));
+}
+else
+{
+    builder.Services.AddDbContext<AppDbContext>(options =>
+        options.UseSqlite(rawConnStr));
+}
 
 // Configure JWT Bearer Authentication
 var jwtSecretKey = builder.Configuration["Jwt:SecretKey"] 
@@ -164,5 +180,30 @@ static void LoadLocalEnvironmentFile(string filePath)
     catch
     {
         // Safe fallback
+    }
+}
+
+static string ConvertPostgresUrlToConnectionString(string urlOrConn)
+{
+    if (!urlOrConn.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) &&
+        !urlOrConn.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+    {
+        return urlOrConn;
+    }
+
+    try
+    {
+        var uri = new Uri(urlOrConn);
+        var userInfo = uri.UserInfo.Split(':');
+        var user = Uri.UnescapeDataString(userInfo[0]);
+        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+        var port = uri.Port > 0 ? uri.Port : 5432;
+        var database = uri.AbsolutePath.TrimStart('/');
+
+        return $"Host={uri.Host};Port={port};Database={database};Username={user};Password={password};SSL Mode=Require;Trust Server Certificate=true";
+    }
+    catch
+    {
+        return urlOrConn;
     }
 }

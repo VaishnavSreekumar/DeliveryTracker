@@ -53,6 +53,29 @@ public class AppDbContext : DbContext
             .Property(h => h.ActorRole)
             .HasConversion<string>();
 
+        // Decimal Precision & Currency Configuration
+        modelBuilder.Entity<RateCard>()
+            .Property(r => r.IntraZoneRatePerKg).HasPrecision(18, 2);
+        modelBuilder.Entity<RateCard>()
+            .Property(r => r.InterZoneRatePerKg).HasPrecision(18, 2);
+        modelBuilder.Entity<RateCard>()
+            .Property(r => r.CODSurcharge).HasPrecision(18, 2);
+
+        modelBuilder.Entity<Order>()
+            .Property(o => o.ActualWeightKg).HasPrecision(18, 2);
+        modelBuilder.Entity<Order>()
+            .Property(o => o.VolumetricWeightKg).HasPrecision(18, 2);
+        modelBuilder.Entity<Order>()
+            .Property(o => o.ChargeableWeightKg).HasPrecision(18, 2);
+        modelBuilder.Entity<Order>()
+            .Property(o => o.RatePerKg).HasPrecision(18, 2);
+        modelBuilder.Entity<Order>()
+            .Property(o => o.DeliveryFee).HasPrecision(18, 2);
+        modelBuilder.Entity<Order>()
+            .Property(o => o.CODSurcharge).HasPrecision(18, 2);
+        modelBuilder.Entity<Order>()
+            .Property(o => o.TotalAmount).HasPrecision(18, 2);
+
         // Relationships
         // User - Agent 1:1
         modelBuilder.Entity<Agent>()

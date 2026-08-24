@@ -601,11 +601,13 @@ DeliveryTracker is designed for public cloud deployment using **Vercel** for the
 
 ### 1. Backend Web Service (Render)
 - **Deployment Type**: Web Service (Docker runtime using root `Dockerfile`).
+- **Database Engine (Production)**: **Render Free PostgreSQL** (or SQLite for zero-config testing).
 - **Port Configuration**: Automatically binds to Render's dynamic `$PORT` environment variable (`http://0.0.0.0:${PORT}`).
-- **Database Persistence**: SQLite database runs by default on the filesystem. For permanent data persistence across service restarts and redeployments, attach a **Render Persistent Disk** (e.g. mount path `/var/data`) and set:
+- **Database Connection**: Set Render Free PostgreSQL connection string:
   ```env
-  ConnectionStrings__DefaultConnection=Data Source=/var/data/delivery.db
+  ConnectionStrings__DefaultConnection=Host=<render-pg-host>;Port=5432;Database=<db>;Username=<user>;Password=<pass>;SSL Mode=Require;Trust Server Certificate=true
   ```
+  *(Supports both standard ADO.NET and Render URL formats `postgres://user:pass@host:port/dbname`)*
 - **Health Check Endpoint**: `/api/health`
 - **Environment Variables**: Configure on Render dashboard (see `.env.example`).
 

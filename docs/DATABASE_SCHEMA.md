@@ -1,7 +1,9 @@
 # DeliveryTracker — Database Schema & Data Dictionary
 
-Database Engine: **SQLite 3**  
-ORM: **Entity Framework Core 10** with strictly applied code-first migrations (`__EFMigrationsHistory`).
+Database Engines:
+- **Local Development**: **SQLite 3** (`Data Source=delivery.db`)
+- **Production Deployment**: **PostgreSQL** (`Npgsql.EntityFrameworkCore.PostgreSQL` on Render Free PostgreSQL)
+ORM: **Entity Framework Core 10** with strictly applied code-first migrations (`__EFMigrationsHistory`) and automated master data seeding.
 
 ---
 

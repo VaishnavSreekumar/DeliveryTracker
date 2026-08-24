@@ -8,8 +8,15 @@ public static class DbInitializer
 {
     public static void Initialize(AppDbContext context)
     {
-        // 1. Apply migrations automatically (Adjustment #2)
-        context.Database.Migrate();
+        // 1. Initialize schema automatically (Migrate for SQLite, EnsureCreated for PostgreSQL/In-Memory)
+        if (context.Database.IsSqlite())
+        {
+            context.Database.Migrate();
+        }
+        else
+        {
+            context.Database.EnsureCreated();
+        }
 
         // 2. Seed Zones & Areas
         if (!context.Zones.Any())
