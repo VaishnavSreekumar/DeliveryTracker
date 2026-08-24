@@ -1,7 +1,7 @@
 # ASSIGNMENT TRACEABILITY MATRIX
 ## DeliveryTracker — Comprehensive Traceability & Hardening Report
 
-*Last Updated: 2026-08-23 | Status: 100% Complete & Verified*
+*Last Updated: 2026-08-24 | Status: 100% Complete & Verified*
 
 ---
 
@@ -11,8 +11,8 @@
 | :--- | :--- | :--- |
 | `dotnet build` (API) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
 | `dotnet build` (Tests) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
-| `dotnet test` (97 tests) | ✅ **97/97 PASSED** | Failed: 0, Passed: 97, Skipped: 0 |
-| `npm run build` (Frontend) | ✅ **Exit 0** | TypeScript compiled clean, Vite bundle 308.46 kB |
+| `dotnet test` (103 tests) | ✅ **103/103 PASSED** | Failed: 0, Passed: 103, Skipped: 0 |
+| `npm run build` (Frontend) | ✅ **Exit 0** | TypeScript compiled clean, Vite bundle 308.48 kB |
 
 ### Test Suite Breakdown
 | Test Class | Tests | Coverage |
@@ -28,7 +28,8 @@
 | `AdminOrderOperationsTests` | 4 | Order booking for customer, manual agent assignment, status override, multi-filter |
 | `CommunicationNotificationTests` | 6 | Multi-channel dispatch (InApp, Email, SMS) on every transition, provider fault safety, live vs simulation status, customer isolation, admin audit log |
 | `CustomerPhoneNumberTests` | 12 | Customer phone registration validation, E.164 persistence, dynamic recipient resolution, customer phone isolation, Twilio mock accepted/rejected delivery statuses |
-| **Total** | **97** | **100% Pass Rate** |
+| `ResendEmailProviderTests` | 6 | Resend HTTPS API acceptance, rejection handling, missing key protection, invalid recipient validation, simulation fallback |
+| **Total** | **103** | **100% Pass Rate** |
 
 ---
 
@@ -45,15 +46,15 @@
 | **REQ-07** | Intelligent Agent Auto-Assignment | `POST /api/orders/{id}/auto-assign` $\rightarrow$ `AgentAssignmentService`. Availability filter, same-zone priority, Haversine tie-breaker. | ✅ **COMPLETE** |
 | **REQ-08** | Status Progression State Machine | `PATCH /api/orders/{id}/status` $\rightarrow$ `OrderStatusService`. Strict transition table (`Created` $\rightarrow$ `PickedUp` $\rightarrow$ `InTransit` $\rightarrow$ `OutForDelivery` $\rightarrow$ `Delivered`/`Failed`). | ✅ **COMPLETE** |
 | **REQ-09** | Delivery Failure Logging | `PATCH /api/orders/{id}/status` (`Failed`) $\rightarrow$ Creates `DeliveryAttempt`, `Notification` (with Title, UserId, OrderId), and history. | ✅ **COMPLETE** |
-| **REQ-10** | Customer Failure Recovery | `POST /api/orders/{id}/reschedule` $\rightarrow$ `DeliveryRecoveryService`. Persists `Order.RescheduledDate`, releases old agent, assigns replacement. | ✅ **COMPLETE** (Phase A) |
+| **REQ-10** | Customer Failure Recovery | `POST /api/orders/{id}/reschedule` $\rightarrow$ `DeliveryRecoveryService`. Persists `Order.RescheduledDate`, releases old agent, assigns replacement. | ✅ **COMPLETE** |
 | **REQ-11** | Reassigned Delivery Completion | Reassigned agent advances `Rescheduled` $\rightarrow$ `OutForDelivery` $\rightarrow$ `Delivered`. Full 8-event immutable audit trail. | ✅ **COMPLETE** |
 | **REQ-12** | Immutable Audit Trail | Append-only `OrderStatusHistories` records every status transition with actor ID, role, notes, and timestamp. | ✅ **COMPLETE** |
 | **REQ-13** | Role-Based Authorization | `[Authorize(Roles = "...")]` on all controllers with JWT bearer validation. | ✅ **COMPLETE** |
-| **REQ-14** | Customer Notification Center | `GET /api/notifications` + `PATCH /api/notifications/{id}/read` + `NotificationCenter.tsx` dropdown with unread badge. | ✅ **COMPLETE** (Phase B) |
-| **REQ-15** | Comprehensive Test Suite | 83 automated xUnit unit & controller tests across 10 test classes. | ✅ **COMPLETE** (Phase C/D1/D2/D3) |
-| **REQ-16** | Admin Configuration Management | Zones CRUD (`/api/zones`), Areas CRUD & Zone Reassignment (`/api/areas`), RateCards configuration (`/api/ratecards`), `AdminConfigurationManager.tsx` UI. | ✅ **COMPLETE** (Phase D1) |
-| **REQ-17** | Admin Order Operations & Override | Admin creates orders on customer's behalf (`POST /api/orders`), manual agent assignment (`POST /api/orders/{id}/assign`), multi-filter (`GET /api/orders`), privileged status override (`POST /api/orders/{id}/override-status`). | ✅ **COMPLETE** (Phase D2) |
-| **REQ-18** | Multi-Channel Communication Integration | Clean abstraction layer (`INotificationService`, `IEmailNotificationProvider`, `ISmsNotificationProvider`), InApp + Email + SMS channels, failure-safe isolation, Admin communication audit log (`GET /api/notifications/order/{id}/communications`). | ✅ **COMPLETE** (Phase D3) |
+| **REQ-14** | Customer Notification Center | `GET /api/notifications` + `PATCH /api/notifications/{id}/read` + `NotificationCenter.tsx` dropdown with unread badge. | ✅ **COMPLETE** |
+| **REQ-15** | Comprehensive Test Suite | 103 automated xUnit unit & controller tests across 12 test classes. | ✅ **COMPLETE** |
+| **REQ-16** | Admin Configuration Management | Zones CRUD (`/api/zones`), Areas CRUD & Zone Reassignment (`/api/areas`), RateCards configuration (`/api/ratecards`), `AdminConfigurationManager.tsx` UI. | ✅ **COMPLETE** |
+| **REQ-17** | Admin Order Operations & Override | Admin creates orders on customer's behalf (`POST /api/orders`), manual agent assignment (`POST /api/orders/{id}/assign`), multi-filter (`GET /api/orders`), privileged status override (`POST /api/orders/{id}/override-status`). | ✅ **COMPLETE** |
+| **REQ-18** | Multi-Channel Communication Integration | Clean abstraction layer (`INotificationService`, `IEmailNotificationProvider`, `ISmsNotificationProvider`), InApp + Email + SMS channels, failure-safe isolation, Admin communication audit log (`GET /api/notifications/order/{id}/communications`). | ✅ **COMPLETE** |
 
 ---
 
@@ -61,14 +62,15 @@
 
 | Gap ID | Description | Resolution | Phase |
 | :--- | :--- | :--- | :--- |
-| **GAP-001** | `Order` entity missing `RescheduledDate` | Added `DateTime? RescheduledDate` to `Order`, generated migration `AddRescheduledDateToOrder`, persisted in `DeliveryRecoveryService`, exposed in `OrderResponse` and `OrderDetailPage.tsx`. | **Phase A (005c452)** |
-| **GAP-002** | `Notification` missing `UserId`, `Title`, `IsRead` | Added `UserId` FK, `Title`, `IsRead` to `Notification`, generated migration `AddNotificationDetailsAndUserId`, updated `OrderStatusService` and `DeliveryRecoveryService`. | **Phase B (4d2796a)** |
-| **GAP-003** | Missing Customer Notification UI | Added `NotificationsController` (`GET`, `PATCH /read`) and `NotificationCenter.tsx` component in header with live polling & unread badge. | **Phase B (4d2796a)** |
-| **DOC-001–004** | Outdated ER & entity fields in `ARCHITECTURE.md` | Rewrote `docs/ARCHITECTURE.md` to reflect exact source code models, algorithms, and security architecture. | **Phase C (480302c)** |
-| **TEST-001** | Empty placeholder `UnitTest1.cs` | Removed `UnitTest1.cs`. | **Phase C (480302c)** |
-| **TEST-002** | Minimal `OrderService` test coverage | Added 5 focused tests to `OrderServiceTests.cs` (scoping, global visibility, detail retrieval, invalid arguments). | **Phase C (480302c)** |
-| **CFG-001** | Dynamic Admin Configuration Management | Implemented complete Zones, Areas (with Zone Reassignment), and RateCards CRUD APIs and frontend UI with dynamic pricing reflection. | **Phase D1 (1b3fbac)** |
-| **OPS-001** | Admin Order Operations & Privileged Override | Implemented Admin order creation on behalf of customer, manual agent assignment, multi-dimensional filtering, and privileged status override with audit logging. | **Phase D2 (c0531a7)** |
+| **GAP-001** | `Order` entity missing `RescheduledDate` | Added `DateTime? RescheduledDate` to `Order`, generated migration `AddRescheduledDateToOrder`, persisted in `DeliveryRecoveryService`, exposed in `OrderResponse` and `OrderDetailPage.tsx`. | **Phase A** |
+| **GAP-002** | `Notification` missing `UserId`, `Title`, `IsRead` | Added `UserId` FK, `Title`, `IsRead` to `Notification`, generated migration `AddNotificationDetailsAndUserId`, updated `OrderStatusService` and `DeliveryRecoveryService`. | **Phase B** |
+| **GAP-003** | Missing Customer Notification UI | Added `NotificationsController` (`GET`, `PATCH /read`) and `NotificationCenter.tsx` component in header with live polling & unread badge. | **Phase B** |
+| **DOC-001–004** | Outdated ER & entity fields in `ARCHITECTURE.md` | Rewrote `docs/ARCHITECTURE.md` to reflect exact source code models, algorithms, and security architecture. | **Phase C** |
+| **TEST-001** | Empty placeholder `UnitTest1.cs` | Removed `UnitTest1.cs`. | **Phase C** |
+| **TEST-002** | Minimal `OrderService` test coverage | Added 5 focused tests to `OrderServiceTests.cs` (scoping, global visibility, detail retrieval, invalid arguments). | **Phase C** |
+| **CFG-001** | Dynamic Admin Configuration Management | Implemented complete Zones, Areas (with Zone Reassignment), and RateCards CRUD APIs and frontend UI with dynamic pricing reflection. | **Phase D1** |
+| **OPS-001** | Admin Order Operations & Privileged Override | Implemented Admin order creation on behalf of customer, manual agent assignment, multi-dimensional filtering, and privileged status override with audit logging. | **Phase D2** |
 | **COM-001** | Multi-Channel Communication Integration | Implemented provider abstractions (`INotificationService`, `IEmailNotificationProvider`, `ISmsNotificationProvider`), InApp + Email + SMS event triggers, failure safety, `.env.example` templates, and Admin communication activity audit logs. | **Phase D3** |
 | **COM-002** | Customer Phone Number & Real Twilio SMS | Required `PhoneNumber` at registration (`Users.PhoneNumber`), EF Core migration `MakePhoneNumberRequired`, dynamic resolution of customer phone number as Twilio `To`, live provider fault isolation and audit logging. | **Phase E** |
 | **DB-001** | Zero-Cost PostgreSQL Multi-Provider Support | Added `Npgsql.EntityFrameworkCore.PostgreSQL` package, dynamic connection string detection (`postgres://`, `Host=`), decimal `(18,2)` precision mappings, and automated master seed execution across SQLite and PostgreSQL. | **Phase H3** |
+| **COM-003** | Production HTTPS Email Provider (Resend) | Implemented `ResendEmailProvider` over HTTPS Port 443 with honest acceptance semantics (`Sent` on 200, `Failed` on rejection), dual provider registration (`EMAIL_PROVIDER=SMTP` for local Gmail, `EMAIL_PROVIDER=HTTP` for cloud). | **Phase H4A** |

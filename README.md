@@ -1,53 +1,12 @@
 # DeliveryTracker
 
-## Last-Mile Delivery Management Platform
+## 🚀 Live Application
 
-DeliveryTracker is a full-stack last-mile delivery management platform designed to manage the complete delivery lifecycle — from price calculation and order creation to agent assignment, delivery tracking, failed-delivery recovery, rescheduling, and final delivery.
-
-The system is built around a RESTful ASP.NET Core backend, EF Core with SQLite, JWT-based role authorization, and a React + TypeScript operations interface.
-
-The main focus of the project is not just CRUD operations, but implementing the business rules behind a real delivery workflow:
-
-- Database-driven shipping rates
-- Volumetric and chargeable weight calculation
-- Intra-zone and inter-zone pricing
-- B2B / B2C pricing
-- COD surcharges
-- Intelligent delivery-agent assignment
-- Agent availability management
-- Haversine distance calculation
-- Controlled order status transitions
-- Immutable delivery tracking history
-- Failed delivery attempts
-- Customer rescheduling
-- Automatic agent reassignment
-- Transactional recovery
-- JWT authentication and role-based authorization
-
----
-
-- [Canonical Documentation Deliverables](#canonical-documentation-deliverables)
-- [Overview](#overview)
-- [Key Features](#key-features)
-- [Screenshots](#screenshots)
-- [Engineering Problems Solved](#engineering-problems-solved)
-- [System Architecture](#system-architecture)
-- [Order Lifecycle](#order-lifecycle)
-- [Failed Delivery Recovery](#failed-delivery-recovery)
-- [Pricing Engine](#pricing-engine)
-- [Agent Assignment](#agent-assignment)
-- [Database Design](#database-design)
-- [API Overview](#api-overview)
-- [Authentication and Authorization](#authentication-and-authorization)
-- [Frontend](#frontend)
-- [Technology Stack](#technology-stack)
-- [Project Structure](#project-structure)
-- [Getting Started](#getting-started)
-- [Demo Accounts](#demo-accounts)
-- [Testing](#testing)
-- [End-to-End Workflow](#end-to-end-workflow)
-- [Design Decisions](#design-decisions)
-- [Future Improvements](#future-improvements)
+- **Frontend (Web Application)**: [https://delivery-tracker-weld.vercel.app/](https://delivery-tracker-weld.vercel.app/)
+- **Backend API Server**: [https://deliverytracker-bhmh.onrender.com](https://deliverytracker-bhmh.onrender.com)
+- **Interactive Swagger Documentation**: [https://deliverytracker-bhmh.onrender.com/swagger](https://deliverytracker-bhmh.onrender.com/swagger)
+- **Backend Health Check**: [https://deliverytracker-bhmh.onrender.com/api/health](https://deliverytracker-bhmh.onrender.com/api/health)
+- **GitHub Repository**: [https://github.com/VaishnavSreekumar/DeliveryTracker](https://github.com/VaishnavSreekumar/DeliveryTracker)
 
 ---
 
@@ -55,394 +14,197 @@ The main focus of the project is not just CRUD operations, but implementing the 
 
 | Document | Purpose & Description |
 | :--- | :--- |
-| **[System Design Document](docs/SYSTEM_DESIGN.md)** | **597 words** (strictly $\le 800$ words) technical architecture write-up covering dynamic pricing, dispatching, state machine, and resilience. |
+| **[System Design Document](docs/SYSTEM_DESIGN.md)** | **597 words** (strictly $\le 800$ words) technical engineering document covering dynamic pricing, dispatching, state machine, and resilience. |
 | **[Pricing Engine & Rate Cards Guide](docs/PRICING_GUIDE.md)** | Volumetric weight formula ($\frac{L \times W \times H}{5000}$), B2B/B2C intra/inter matrices, and COD surcharges. |
 | **[REST API Reference](docs/API_REFERENCE.md)** | Complete endpoint specifications, payload schemas, query filters, and JWT RBAC authorization policies. |
-| **[Database Schema & Data Dictionary](docs/DATABASE_SCHEMA.md)** | Complete 9-table schema, foreign keys, enums, indexes, and immutable audit trail. |
+| **[Database Schema & Data Dictionary](docs/DATABASE_SCHEMA.md)** | Multi-provider architecture (SQLite for local, PostgreSQL for cloud), 9 tables, indexes, and immutable audit trail. |
 | **[Architecture & Security](docs/ARCHITECTURE.md)** | Decoupled client-server architecture, fault isolation, and threat modeling. |
-| **[Assignment Traceability Matrix](docs/ASSIGNMENT_TRACEABILITY.md)** | 100% requirements mapping (REQ-01 through REQ-18) and automated test suite coverage. |
+| **[Assignment Traceability Matrix](docs/ASSIGNMENT_TRACEABILITY.md)** | 100% requirements mapping (REQ-01 through REQ-18) and automated test suite coverage (103/103 passing). |
 
 ---
 
 # Overview
 
-DeliveryTracker models a simplified but realistic last-mile delivery operation.
+DeliveryTracker is a production-grade last-mile delivery management platform engineered to handle the complete delivery lifecycle — from dynamic price estimation and order creation to intelligent agent dispatching, live timeline tracking, failure recovery, rescheduling, and final delivery.
 
-A customer can create a shipment by providing:
-- Pickup area
-- Drop area
-- Package dimensions
-- Actual weight
-- Order type
-- Payment type
+The system is built around an ASP.NET Core REST API (.NET 10), Entity Framework Core with dual database support (SQLite locally, PostgreSQL in production), cryptographically signed JWT role authorization, and a high-density React 19 + TypeScript operations interface.
 
-Before creating the order, the system calculates the shipping price using the configured rate card.
-
-Once the order is created, an administrator can assign an available delivery agent. The agent then progresses the order through a controlled state machine.
-
-If delivery fails, the system records the failed attempt, creates a customer notification, allows the customer to reschedule, releases the previous agent, and assigns another available agent.
-
-Every status transition is permanently recorded in an immutable tracking history.
+The core engineering focus is implementing real-world logistics business rules:
+- Database-driven shipping rate cards (B2C & B2B)
+- Volumetric and chargeable weight calculation
+- Intra-zone and inter-zone geographic classification
+- Cash on Delivery (COD) surcharges
+- Intelligent delivery agent auto-assignment (Zone priority + Haversine distance)
+- Controlled linear state machine progression
+- Append-only immutable delivery tracking history
+- Transactional failed delivery recovery & customer rescheduling
+- Automatic replacement agent reassignment with previous agent exclusion
+- Multi-channel notification engine (In-App, Email over HTTPS / SMTP, Twilio SMS)
+- Admin configuration console (Zones, Areas, Rate Cards) and privileged status overrides
 
 ---
 
 # Key Features
 
 ## Customer
-- Register and login with JWT authentication
-- Create delivery orders with dynamic area selection
-- Preview shipping price before confirmation
-- View personal orders with claim-based privacy scoping
-- Track real-time delivery history and assigned delivery agent
-- Inspect package dimensions, chargeable weight, and fee breakdown
-- Reschedule failed deliveries for future dates
-- Receive real-time failure & reschedule notifications via Notification Center dropdown
+- Self-registration and login with secure PBKDF2 password hashing and JWT authentication.
+- Create delivery orders with dynamic origin/destination area selection.
+- Real-time quote preview calculating volumetric weight and rate card fees before booking.
+- View personal orders with claim-based privacy scoping (`CustomerId = sub`).
+- Interactive order detail view with signature vertical tracking audit trail.
+- Self-service rescheduling of failed deliveries for future dates.
+- Real-time In-App Notification Center with live polling and unread badge.
 
 ## Delivery Agent
-- Login using JWT
-- View assigned deliveries strictly scoped to assigned agent ID
-- View order details and delivery addresses
-- Update delivery status (`Created` &rarr; `PickedUp` &rarr; `InTransit` &rarr; `OutForDelivery` &rarr; `Delivered`)
-- Report failed delivery attempts with mandatory failure reason notes
-- Continue delivery after reassignment
+- Dedicated agent login scoped to assigned delivery tasks.
+- View assigned deliveries with pickup/drop addresses, package dimensions, and cash collection requirements.
+- Sequential state machine progression (`Created` &rarr; `PickedUp` &rarr; `InTransit` &rarr; `OutForDelivery` &rarr; `Delivered`).
+- Report failed delivery attempts with mandatory reason logging.
+- Handle reassigned deliveries after customer rescheduling.
 
-## Admin
-- View all system orders across customers and agents
-- View complete order history and audit trails
-- Trigger automatic agent assignment using nearest-agent Haversine algorithm
-- Monitor operational metrics (Total, Active, Failed, Delivered)
-- Inspect failed and rescheduled orders
-
-## Backend Engineering
-- ASP.NET Core Web API (.NET 10)
-- Entity Framework Core with SQLite migrations (`Migrate()`)
-- Database-driven configurable rate cards
-- JWT authentication (`sub`, `email`, `role` claims)
-- Password hashing via `PasswordHasher<User>`
-- Service-based architecture with transactional rollback fail-safes
-- Append-only immutable status history audit trail
-
----
-
-# Screenshots
-
-| Login | Create Delivery |
-| :---: | :---: |
-| ![Login Page](docs/screenshots/01_login.png) | ![Create Delivery](docs/screenshots/02_create_delivery.png) |
-
-| Order Tracking Timeline | Admin Operations Console |
-| :---: | :---: |
-| ![Order Detail](docs/screenshots/03_order_detail.png) | ![Admin Operations](docs/screenshots/04_admin_operations.png) |
-
----
-
-# Engineering Problems Solved
-
-This project was built to demonstrate correct implementation of backend business rules, not just CRUD endpoints. The following problems required deliberate engineering decisions:
-
-- **Pricing consistency**: Price preview (`POST /api/orders/calculate-price`) and order creation both call the same `PricingService`, so a customer can never be charged a different amount than what was quoted.
-- **Assignment correctness**: Agents are filtered by `IsAvailable == true`, ranked by same-zone preference, then ordered by Haversine distance from the pickup area. This guarantees the nearest available agent is always selected.
-- **Workflow integrity**: Invalid delivery status jumps (e.g. `Created → Delivered`) are rejected at the service layer by a validated transition table. The API never silently accepts illegal transitions.
-- **Auditability**: Every status change appends a new immutable row to `OrderStatusHistories` with actor identity, actor role, notes, and timestamp. Status is never overwritten.
-- **Failure recovery safety**: When a delivery is rescheduled, the previous agent is released (`IsAvailable = true`) and excluded from reassignment by `excludeAgentId`. This prevents the same failed agent from being reassigned to the same order.
-- **Authorization boundaries**: `CustomerId` and `AgentId` are derived exclusively from authenticated JWT claims (`sub`), never from client-supplied request parameters. A customer cannot access another customer's orders, and an agent cannot update a delivery assigned to a different agent.
+## Administrator
+- Global operations dashboard monitoring all orders, agents, zones, and revenue.
+- Multi-dimensional filtering (Status, Zone, Agent, Search query).
+- Dynamic configuration management for Zones, Areas (with zone reassignment), and Rate Cards.
+- Trigger intelligent agent auto-assignment or manual agent dispatching.
+- Privileged status override capability with mandatory audit reason logging.
+- Complete multi-channel communication audit log inspection for every order.
 
 ---
 
 # System Architecture
 
-The application follows a clean layered architecture.
+DeliveryTracker follows a clean layered architecture with strict separation of concerns:
 
-```mermaid
-flowchart TB
-
-    subgraph Client["React Frontend"]
-        UI["Customer / Agent / Admin UI"]
-        AUTHUI["Login & Registration"]
-        TRACK["Tracking Timeline"]
-        BOOK["Shipping Booking"]
-        OPS["Operations Dashboard"]
-    end
-
-    subgraph API["ASP.NET Core Web API"]
-        AUTH["Auth Controller"]
-        ORDERS["Orders Controller"]
-        PRICING["Pricing Controller"]
-        ZONES["Zones Controller"]
-    end
-
-    subgraph SERVICES["Business Services"]
-        AS["Agent Assignment Service"]
-        OS["Order Service"]
-        PS["Pricing Service"]
-        OSS["Order Status Service"]
-        DRS["Delivery Recovery Service"]
-        AUS["Auth Service"]
-    end
-
-    subgraph DATA["Data Layer"]
-        EF["Entity Framework Core"]
-        DB[("SQLite delivery.db")]
-    end
-
-    UI --> API
-    AUTHUI --> AUTH
-    BOOK --> PRICING
-    BOOK --> ORDERS
-    TRACK --> ORDERS
-    OPS --> ORDERS
-
-    AUTH --> AUS
-    ORDERS --> OS
-    ORDERS --> AS
-    ORDERS --> OSS
-    ORDERS --> DRS
-    PRICING --> PS
-    ZONES --> EF
-
-    OS --> PS
-    DRS --> AS
-    DRS --> OSS
-
-    AUS --> EF
-    AS --> EF
-    OS --> EF
-    PS --> EF
-    OSS --> EF
-    DRS --> EF
-
-    EF --> DB
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    React 19 + TypeScript SPA                │
+│       (Customer Portal • Agent Console • Admin Operations)  │
+└──────────────────────────────┬──────────────────────────────┘
+                               │ HTTPS / JSON / Bearer JWT
+┌──────────────────────────────▼──────────────────────────────┐
+│                  ASP.NET Core 10 Web API                    │
+│   Controllers: Auth • Orders • Pricing • Zones • Areas •     │
+│                RateCards • Agents • Notifications           │
+├─────────────────────────────────────────────────────────────┤
+│                    Business Services Layer                  │
+│   • PricingService          • AgentAssignmentService        │
+│   • OrderStatusService      • DeliveryRecoveryService       │
+│   • OrderService            • NotificationService           │
+├─────────────────────────────────────────────────────────────┤
+│                Entity Framework Core 10 ORM                 │
+└──────────────┬───────────────────────────────┬──────────────┘
+               │                               │
+┌──────────────▼─────────────┐   ┌─────────────▼──────────────┐
+│    Local: SQLite 3         │   │ Production: PostgreSQL     │
+│    (delivery.db)           │   │ (Render Managed PG)        │
+└────────────────────────────┘   └────────────────────────────┘
 ```
 
 ---
 
-# Order Lifecycle
+# Roles & Access Control
 
-The status of a delivery order follows a strict state machine pattern enforced by `OrderStatusService`.
+Access control is strictly enforced at the API controller level using JWT Bearer authentication:
+
+| Role | Permitted Capabilities | Scoping Mechanism |
+| :--- | :--- | :--- |
+| **Customer** | Create orders, calculate quotes, view own orders, reschedule own failed deliveries, receive notifications. | `CustomerId == User.Id` (Claims `sub`) |
+| **Agent** | View assigned deliveries, advance order status sequentially, report delivery failures. | `AssignedAgentId == Agent.Id` |
+| **Admin** | Global order visibility, manual/auto agent assignment, zone/area/rate card CRUD, status overrides, dispatch audit logs. | `Roles = "Admin"` |
+
+---
+
+# Pricing Engine
+
+The pricing engine dynamically calculates delivery fees from database `RateCards`:
+
+### 1. Volumetric Weight Formula
+$$\text{Volumetric Weight (kg)} = \frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{5000}$$
+
+### 2. Chargeable Weight Rule
+$$\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$$
+
+### 3. Rate Resolution Matrix
+- **Geographic Scope**: Origin and destination area zones are compared:
+  - **Intra-Zone**: Same zone (`pickupArea.ZoneId == dropArea.ZoneId`).
+  - **Inter-Zone**: Cross-zone (`pickupArea.ZoneId != dropArea.ZoneId`).
+- **Tier Category**: `B2C` (Retail Consumer) vs `B2B` (Commercial Enterprise).
+- **Payment Collection**: If `PaymentType == COD`, adds configured flat `CODSurcharge`.
+
+$$\text{Delivery Fee} = \text{Chargeable Weight (kg)} \times \text{Rate Per Kg (₹)}$$
+$$\text{Total Amount} = \text{Delivery Fee} + \text{COD Surcharge (if COD)}$$
+
+---
+
+# Intelligent Agent Assignment
+
+Agent assignment evaluates active personnel using a two-tier optimization algorithm:
+
+1. **Availability Filter**: Candidates must have `IsAvailable == true`.
+2. **Exclusion Filter**: When rescheduling, previously failed agents (`excludeAgentId`) are excluded.
+3. **Same-Zone Priority**: Agents stationed in the order's pickup zone (`agent.ZoneId == pickupArea.ZoneId`) receive top priority.
+4. **Haversine Distance Tie-Breaker**: For candidates in equal zone tiers, great-circle distance is calculated:
+   $$d = 2R \arcsin\left(\sqrt{\sin^2\left(\frac{\Delta \phi}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\Delta \lambda}{2}\right)}\right)$$
+5. **Atomic Reservation**: The highest-ranked agent is linked to the order and marked `IsAvailable = false` in a database transaction.
+
+---
+
+# Order Lifecycle & State Machine
+
+Order status transitions are strictly governed by a linear finite state machine in `OrderStatusService`:
 
 ```mermaid
 stateDiagram-v2
     [*] --> Created: Order Confirmed
     Created --> PickedUp: Agent Picked Up Package
     PickedUp --> InTransit: Package En Route
-    InTransit --> OutForDelivery: Agent Arrived in Local Zone
+    InTransit --> OutForDelivery: Agent in Destination Area
     OutForDelivery --> Delivered: Successful Handover
     OutForDelivery --> Failed: Delivery Attempt Failed
     Failed --> Rescheduled: Customer Selects Future Date
-    Rescheduled --> OutForDelivery: Reassigned Agent Attempts Delivery
+    Rescheduled --> OutForDelivery: Replacement Agent Dispatched
 ```
 
-### Valid Transitions
-1. `Created` &rarr; `PickedUp` (Allowed: Agent, Admin)
-2. `PickedUp` &rarr; `InTransit` (Allowed: Agent, Admin)
-3. `InTransit` &rarr; `OutForDelivery` (Allowed: Agent, Admin)
-4. `OutForDelivery` &rarr; `Delivered` (Allowed: Agent, Admin)
-5. `OutForDelivery` &rarr; `Failed` (Allowed: Agent, Admin; requires notes)
-6. `Failed` &rarr; `Rescheduled` (Allowed: Customer, Admin; requires future date)
-7. `Rescheduled` &rarr; `OutForDelivery` (Allowed: Agent, Admin)
+- **Immutable Audit Trail**: Every status change appends a row to `OrderStatusHistories` recording `OrderId`, `Status`, `ActorId`, `ActorRole`, `Notes`, and UTC `Timestamp`. Status history is never updated or deleted.
 
 ---
 
-# Failed Delivery Recovery
+# Failed Delivery & Rescheduling Recovery
 
-When a delivery attempt fails, `DeliveryRecoveryService` handles the recovery workflow transactionally:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor Agent as Delivery Agent 1
-    actor Customer as Customer
-    actor Agent2 as Delivery Agent 2
-    participant API as Web API
-    participant DB as SQLite DB
-
-    Agent->>API: PATCH /api/orders/{id}/status (Failed + Notes)
-    API->>DB: Record DeliveryAttempt & Notification
-    API->>DB: Update Order Status -> Failed
-    API->>Customer: Order status shows Failed & Failure Reason
-    Customer->>API: POST /api/orders/{id}/reschedule (New Date)
-    API->>DB: Release Agent 1 (IsAvailable = true)
-    API->>DB: Auto-Assign Agent 2 (Excluding Agent 1)
-    API->>DB: Update Order Status -> Rescheduled
-    Agent2->>API: PATCH /api/orders/{id}/status (OutForDelivery)
-    Agent2->>API: PATCH /api/orders/{id}/status (Delivered)
-    API->>DB: Immutable Audit Trail complete (8 Events)
-```
+When an attempt cannot be completed:
+1. Agent marks order `Failed` with mandatory failure notes.
+2. System records `DeliveryAttempt`, creates a failure notification, and releases the agent (`IsAvailable = true`).
+3. Customer opens the order and selects a future delivery date via `POST /api/orders/{id}/reschedule`.
+4. System sets status to `Rescheduled`, stores `RescheduledDate`, and automatically finds and assigns a replacement agent (excluding the previous agent).
+5. Replacement agent advances `Rescheduled` &rarr; `OutForDelivery` &rarr; `Delivered`.
 
 ---
 
-# Pricing Engine
+# Multi-Channel Notifications
 
-The pricing engine calculates shipping costs dynamically based on database-driven `RateCards`.
+DeliveryTracker features a decoupled notification subsystem (`INotificationService`):
 
-### Weight Rules
-- **Volumetric Weight**:
-  $$\text{Volumetric Weight (kg)} = \frac{\text{Length (cm)} \times \text{Width (cm)} \times \text{Height (cm)}}{5000}$$
-- **Chargeable Weight**:
-  $$\text{Chargeable Weight} = \max(\text{Actual Weight}, \text{Volumetric Weight})$$
-
-### Rate Card Lookup
-- Fetches a `RateCard` row matching the order's `OrderType` (`B2C` or `B2B`).
-- Determines the applicable rate: **IntraZone** (`IntraZoneRatePerKg`) when pickup and drop areas share the same zone, **InterZone** (`InterZoneRatePerKg`) otherwise.
-- If `PaymentType == COD`, adds a fixed `CODSurcharge` amount configured in the `RateCard` (e.g. ₹40.00 flat).
-
-$$\text{Delivery Fee} = \text{Chargeable Weight} \times \text{RatePerKg}$$
-
-$$\text{Total Amount} = \text{Delivery Fee} + \text{CODSurcharge}$$
-
-The price calculation is shared between the `/calculate-price` endpoint and order creation, ensuring the customer is always charged the same amount that was quoted.
-
----
-
-# Agent Assignment
-
-The intelligent agent assignment algorithm operates via `AgentAssignmentService`:
-
-1. **Availability Filter**: Queries `Agents` where `IsAvailable == true`.
-2. **Exclusion Check**: During rescheduling, accepts `excludeAgentId` to skip previous failed agents.
-3. **Same-Zone Preference**: Prioritizes agents located in the order's pickup zone.
-4. **Distance Tie-Breaker**: Uses the Haversine formula to compute exact distance between agent coordinates $(lat_1, lon_1)$ and pickup area coordinates $(lat_2, lon_2)$:
-   $$d = 2r \arcsin \left( \sqrt{ \sin^2\left(\frac{\Delta \phi}{2}\right) + \cos(\phi_1)\cos(\phi_2)\sin^2\left(\frac{\Delta \lambda}{2}\right) } \right)$$
-5. **State Mutation**: Marks assigned agent `IsAvailable = false` and links agent to order.
-
----
-
-# Database Design
-
-The database schema is managed via Entity Framework Core migrations on SQLite (`delivery.db`).
-
-```mermaid
-erDiagram
-    USERS {
-        int Id PK
-        string FullName
-        string Email
-        string PasswordHash
-        string Role
-    }
-    ZONES {
-        int Id PK
-        string Name
-        string Code
-    }
-    AREAS {
-        int Id PK
-        string Name
-        string Code
-        int ZoneId FK
-        float Latitude
-        float Longitude
-    }
-    RATE_CARDS {
-        int Id PK
-        string OrderType
-        decimal IntraZoneRatePerKg
-        decimal InterZoneRatePerKg
-        decimal CODSurcharge
-    }
-    AGENTS {
-        int Id PK
-        int UserId FK
-        bool IsAvailable
-        int ZoneId FK
-    }
-    ORDERS {
-        int Id PK
-        string TrackingNumber
-        int CustomerId FK
-        int AssignedAgentId FK
-        int PickupAreaId FK
-        int DropAreaId FK
-        decimal TotalAmount
-        string Status
-        string OrderType
-        string PaymentType
-    }
-    ORDER_STATUS_HISTORIES {
-        int Id PK
-        int OrderId FK
-        string Status
-        int ActorId
-        string ActorRole
-        string Notes
-        datetime Timestamp
-    }
-    DELIVERY_ATTEMPTS {
-        int Id PK
-        int OrderId FK
-        int AgentId FK
-        int AttemptNumber
-        string Reason
-    }
-    NOTIFICATIONS {
-        int Id PK
-        int UserId FK
-        int OrderId FK
-        string Title
-        string Message
-    }
-
-    USERS ||--o| AGENTS : "is"
-    USERS ||--o{ ORDERS : "places"
-    ZONES ||--o{ AREAS : "contains"
-    ZONES ||--o{ AGENTS : "serves"
-    AREAS ||--o{ ORDERS : "pickup"
-    AREAS ||--o{ ORDERS : "dropoff"
-    AGENTS ||--o{ ORDERS : "assigned"
-    ORDERS ||--o{ ORDER_STATUS_HISTORIES : "records"
-    ORDERS ||--o{ DELIVERY_ATTEMPTS : "attempts"
-    ORDERS ||--o{ NOTIFICATIONS : "triggers"
-```
-
----
-
-# API Overview
-
-| Endpoint | Method | Roles | Description |
+| Channel | Local Development | Production (Cloud) | Trigger Events |
 | :--- | :--- | :--- | :--- |
-| `/api/auth/register` | `POST` | Public | Register customer account. |
-| `/api/auth/login` | `POST` | Public | Authenticate and receive JWT Bearer token. |
-| `/api/zones` | `GET` | Public | List all zones and areas. |
-| `/api/orders/calculate-price` | `POST` | Public | Preview shipping rate calculation. |
-| `/api/orders` | `POST` | Customer, Admin | Create new delivery order (JWT derives `CustomerId`). |
-| `/api/orders` | `GET` | Customer, Agent, Admin | List orders (Scoped by user role). |
-| `/api/orders/{id}` | `GET` | Customer, Agent, Admin | Get order details (Privacy protected). |
-| `/api/orders/{id}/status` | `PATCH` | Agent, Admin | Advance order status in state machine. |
-| `/api/orders/{id}/reschedule` | `POST` | Customer, Admin | Reschedule failed order for future date. |
-| `/api/orders/{id}/auto-assign` | `POST` | Admin | Trigger intelligent agent auto-assignment. |
+| **In-App** | PostgreSQL / SQLite | PostgreSQL / SQLite | All lifecycle events |
+| **Email** | Gmail SMTP (`smtp.gmail.com:587`) | **Resend HTTPS REST API** (Port 443) | Order created, failed, rescheduled, delivered |
+| **SMS** | Twilio REST API / Sandbox | **Twilio REST API** (Port 443) | Order created, out for delivery, failed, rescheduled, delivered |
 
----
-
-# Authentication and Authorization
-
-- **JWT Tokens**: Signed with HMAC-SHA256 containing `sub` (User ID), `email`, and `role` claims.
-- **Password Security**: Passwords hashed using ASP.NET Core `PasswordHasher<User>`.
-- **Role Permissions**:
-  - `Customer`: Can create orders, view own orders, and reschedule own failed orders.
-  - `Agent`: Can view assigned deliveries and update status of assigned orders.
-  - `Admin`: Can view all orders and trigger agent auto-assignment.
-
----
-
-# Frontend
-
-Built with Vite, React 19, TypeScript, and Lucide Icons. Designed with an operational slate design system (`src/index.css`) optimized for information density, scannability, and real-time tracking audit trails.
-
-Key views include:
-- Operational Login with quick evaluator demo buttons.
-- 4-step shipping booking flow with live price estimation.
-- Primary product order detail view with signature vertical tracking timeline.
-- Compact operations tables with live search and status filters.
+- **Dynamic Recipient Resolution**: Recipient emails and phone numbers are dynamically obtained from `Users.Email` and `Users.PhoneNumber`.
+- **Honest Delivery Semantics**: The database accurately records `Sent` on provider acceptance and `Failed` with the exact provider error message on rejection. Faking delivery is strictly prohibited.
+- **Fault Isolation**: Email or SMS network issues never crash or roll back core delivery state transactions.
 
 ---
 
 # Technology Stack
 
 - **Backend**: C# / .NET 10, ASP.NET Core Web API
-- **Data Access**: Entity Framework Core 10, SQLite
-- **Security**: JWT Bearer (`Microsoft.AspNetCore.Authentication.JwtBearer`), `PasswordHasher<User>`
-- **Testing**: xUnit test framework (69 automated tests)
-- **Frontend**: React 19, TypeScript, Vite, Lucide React, Vanilla CSS design tokens
+- **ORM & Data Access**: Entity Framework Core 10 (`Npgsql.EntityFrameworkCore.PostgreSQL` / `Microsoft.EntityFrameworkCore.Sqlite`)
+- **Security**: JWT Bearer Tokens, PBKDF2 with HMAC-SHA256 password hashing
+- **Testing**: xUnit, FluentAssertions, Mocked HttpMessageHandler (103 automated tests)
+- **Frontend**: React 19, TypeScript, Vite, Lucide Icons, Vanilla CSS design tokens
+- **Cloud Infrastructure**: Vercel (Frontend SPA), Render (Dockerized Web Service), Render Free PostgreSQL
 
 ---
 
@@ -450,186 +212,132 @@ Key views include:
 
 ```text
 DeliveryTracker/
-├── DeliveryTracker.API/            # ASP.NET Core Web API
-│   ├── Controllers/               # Auth, Orders, Pricing, Notifications, Zones
-│   ├── Data/                      # DbContext & EF Migrations
-│   ├── DTOs/                      # Request & Response Contracts
-│   ├── Entities/                  # Domain Models (Order, Agent, User, Notification, etc.)
-│   ├── Services/                  # Business Logic & Algorithms
-│   ├── appsettings.json           # JWT & DB Configuration
-│   └── Program.cs                 # DI & Pipeline Setup
-├── DeliveryTracker.Tests/          # xUnit Test Suite (69 Tests)
-│   ├── AuthServiceTests.cs
-│   ├── DeliveryRecoveryServiceTests.cs
-│   ├── OrderStatusServiceTests.cs
+├── DeliveryTracker.API/            # ASP.NET Core Web API (.NET 10)
+│   ├── Controllers/               # Auth, Orders, Pricing, Notifications, Zones, Areas, RateCards, Agents
+│   ├── Data/                      # AppDbContext, DbInitializer, EF Migrations
+│   ├── DTOs/                      # Request & Response Data Contracts
+│   ├── Entities/                  # User, Agent, Zone, Area, RateCard, Order, Notification, etc.
+│   ├── Services/                  # Pricing, Assignment, OrderStatus, Recovery, Notifications
+│   │   └── Communication/         # ResendEmailProvider, SmtpEmailProvider, TwilioSmsProvider
+│   ├── appsettings.json           # Base Configuration
+│   ├── Dockerfile                 # Multi-stage production container
+│   └── Program.cs                 # Dynamic DI & Middleware Setup
+├── DeliveryTracker.Tests/          # xUnit Test Suite (103 Tests)
 │   ├── PricingServiceTests.cs
 │   ├── AgentAssignmentServiceTests.cs
-│   ├── NotificationTests.cs
-│   └── OrderServiceTests.cs
-└── DeliveryTracker.Web/            # React + TypeScript Frontend
-    ├── src/
-    │   ├── api/                   # Centralized API Client
-    │   ├── components/            # Timeline, StatusBadge, Layout, NotificationCenter, Modals
-    │   ├── context/               # AuthContext
-    │   ├── pages/                 # Booking, Detail, Console, Auth
-    │   └── types/                 # Domain Interfaces
-    ├── index.html
-    └── package.json
+│   ├── OrderStatusServiceTests.cs
+│   ├── DeliveryRecoveryServiceTests.cs
+│   ├── ResendEmailProviderTests.cs
+│   ├── CustomerPhoneNumberTests.cs
+│   └── AdminOrderOperationsTests.cs
+├── DeliveryTracker.Web/            # React 19 + TypeScript SPA
+│   ├── src/
+│   │   ├── api/                   # Centralized API Client (Axios/Fetch wrapper)
+│   │   ├── components/            # Timeline, StatusBadge, NotificationCenter, Modals
+│   │   ├── context/               # AuthContext
+│   │   └── pages/                 # Booking, Detail, Operations Console, Admin Config, Auth
+│   ├── vercel.json                # SPA deep-linking rewrite rules
+│   └── package.json
+├── docs/                          # Comprehensive Technical Documentation
+│   ├── SYSTEM_DESIGN.md           # 597-word canonical system design document
+│   ├── PRICING_GUIDE.md           # Volumetric pricing & rate cards guide
+│   ├── API_REFERENCE.md           # 22 REST endpoint specifications
+│   ├── DATABASE_SCHEMA.md         # Data dictionary & ER diagrams
+│   └── ASSIGNMENT_TRACEABILITY.md # 100% requirements verification matrix
+├── vercel.json                    # Root monorepo Vercel deployment configuration
+└── README.md                      # Primary documentation deliverable
 ```
 
 ---
 
-# Getting Started
+# Local Setup
 
 ### Prerequisites
 - [.NET 10 SDK](https://dotnet.microsoft.com/download)
 - [Node.js (v18+) & npm](https://nodejs.org/)
 
-### 1. Run Backend Web API
+### 1. Run Backend API
 ```bash
 cd DeliveryTracker.API
 dotnet run --urls "http://localhost:5055"
 ```
-The API server will automatically apply EF migrations, seed master data, and start on `http://localhost:5055`. You can inspect Swagger UI at `http://localhost:5055/swagger`.
+The API server automatically applies EF migrations, seeds master data, and starts at `http://localhost:5055`. Explore interactive Swagger at `http://localhost:5055/swagger`.
 
-### 2. Run React Frontend
+### 2. Run Frontend Client
 ```bash
 cd DeliveryTracker.Web
 npm install
 npm run dev
 ```
-Open your browser to `http://localhost:5173`.
+Open your browser at `http://localhost:5173`.
 
 ---
 
 # Demo Accounts
 
-The database is seeded with preset demo accounts for evaluation:
+The database is initialized with pre-configured demo credentials:
 
-| Role | Email | Password | Allowed Capabilities |
+| Role | Email | Password | Phone Number |
 | :--- | :--- | :--- | :--- |
-| **Customer** | `customer@delivery.com` | `Customer@123` | Create orders, view personal orders, reschedule failed orders. |
-| **Agent 1** | `agent1@delivery.com` | `Agent@123` | View assigned orders, update status of assigned deliveries. |
-| **Agent 2** | `agent2@delivery.com` | `Agent@123` | View assigned orders, handle reassigned deliveries. |
-| **Admin** | `admin@delivery.com` | `Admin@123` | Access operations console, view all system orders, trigger auto-assign. |
+| **System Admin** | `admin@delivery.com` | `Admin@123` | `+18005550100` |
+| **Customer** | `customer@delivery.com` | `Customer@123` | `+919037350803` |
+| **Delivery Agent 1** | `agent1@delivery.com` | `Agent@123` | `+18005550101` |
+| **Delivery Agent 2** | `agent2@delivery.com` | `Agent@123` | `+18005550102` |
 
 ---
 
-### Multi-Channel Customer Communication
-DeliveryTracker includes a multi-channel notification subsystem supporting:
-1. **In-App Notification Center**: Real-time bell dropdown in the header with unread badge counter, direct order navigation, and read state marking.
-2. **Email Communication Channel**: Structured HTML email updates dispatched on critical lifecycle events (`OrderCreated`, `PickedUp`, `InTransit`, `OutForDelivery`, `DeliveryFailed`, `OrderRescheduled`, `AgentReassigned`, `OrderDelivered`).
-3. **SMS Communication Channel**: Urgent SMS notifications dispatched on high-priority delivery events (`OutForDelivery`, `DeliveryFailed`, `OrderRescheduled`, `OrderDelivered`).
-4. **Failure-Safe Error Isolation**: External provider failures or gateway timeouts never fail or roll back core delivery state machine transactions.
-5. **Operational Audit Visibility**: Administrators can inspect complete multi-channel communication audit logs for every order directly from the order detail interface.
+# Environment Variables Reference
+
+Sensitive credentials must be configured as server-side environment variables and **never committed to version control**:
+
+| Variable Name | Purpose & Example Placeholder | Scope |
+| :--- | :--- | :--- |
+| `ConnectionStrings__DefaultConnection` | Database connection string (SQLite or PostgreSQL) | Backend |
+| `Jwt__SecretKey` | JWT cryptographic signing key (min 32 chars) | Backend |
+| `ALLOWED_ORIGINS` | Comma-separated CORS allowed origins | Backend |
+| `EMAIL_PROVIDER` | `HTTP` (Production Resend) or `SMTP` (Local Gmail) | Backend |
+| `RESEND_API_KEY` | Resend HTTPS API key (`re_...`) | Backend |
+| `HTTP_EMAIL_FROM` | Verified sender email (`onboarding@resend.dev`) | Backend |
+| `HTTP_EMAIL_FROM_NAME` | Display sender name (`DeliveryTracker Dispatch`) | Backend |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP host (`smtp.gmail.com`) and port (`587`) | Backend (Local) |
+| `SMTP_USERNAME` / `SMTP_PASSWORD` | SMTP operator credentials | Backend (Local) |
+| `TWILIO_ACCOUNT_SID` | Twilio Account SID (`AC...`) | Backend |
+| `TWILIO_API_KEY` / `TWILIO_API_SECRET` | Twilio API Key and Secret | Backend |
+| `TWILIO_FROM_NUMBER` | Registered Twilio sender phone number | Backend |
+| `VITE_API_BASE_URL` | Frontend API target (`https://deliverytracker-bhmh.onrender.com/api`) | Frontend |
 
 ---
 
-# Configuration & Providers
+# Testing & Verification
 
-DeliveryTracker supports both safe simulated development mode and production SMTP / SMS integration.
-
-See `.env.example` for environment variable templates:
+### Automated Unit Test Suite (103 Tests)
 ```bash
-# Email Configuration
-NOTIFICATION_EMAIL_ENABLED=true
-NOTIFICATION_EMAIL_PROVIDER=Development # Options: Development, Smtp
-NOTIFICATION_EMAIL_FROM=notifications@deliverytracker.com
-
-# SMTP Settings (Required if NOTIFICATION_EMAIL_PROVIDER=Smtp)
-SMTP_HOST=smtp.mailtrap.io
-SMTP_PORT=587
-SMTP_USERNAME=your_smtp_username
-SMTP_PASSWORD=your_smtp_password
-
-# SMS Configuration
-NOTIFICATION_SMS_ENABLED=true
-NOTIFICATION_SMS_PROVIDER=Development # Options: Development, Twilio
-NOTIFICATION_SMS_FROM=+18005550199
-```
-
-When set to `Development`, the system logs and persists communication records with `DeliveryStatus = Simulated` without attempting external network calls or pretending that physical emails/SMS messages were delivered.
-
----
-
-# Testing
-
-### Automated Unit Tests (`dotnet test`)
-Run the backend test suite:
-```bash
-cd DeliveryTracker.Tests
 dotnet test
 ```
-All **83 automated tests** test pricing calculations, agent assignment, state transitions, failed recovery, admin configuration, admin order operations, and multi-channel communication failure-safety.
+**Results:** `Passed! - Failed: 0, Passed: 103, Skipped: 0 (100% Pass Rate)`
 
-### Production Build Verification
+### Production Bundle Build
 ```bash
 cd DeliveryTracker.Web
 npm run build
 ```
+**Results:** TypeScript checked and built cleanly (`dist/assets/index-B7O1ciIu.js`).
 
 ---
 
-# End-to-End Workflow
+# Production Deployment
 
-To experience the full business lifecycle:
-
-1. **Login as Customer** (`customer@delivery.com` / `Customer@123`).
-2. **Book Delivery**: Select Colaba &rarr; Andheri, 25&times;15&times;10 cm, 3.5 kg, B2C + COD. Click **Calculate Quote** (₹250.00), then **Confirm Delivery**. Receive tracking number `LM-YYYYMMDD-XXXXXX`. In-app, Email, and SMS communication records are logged.
-3. **Login as Admin** (`admin@delivery.com` / `Admin@123`). Go to **Operations Console**, locate order, click **Auto Assign** or **Manual Assign**. Agent 1 (`Raj Agent`) is assigned.
-4. **Login as Agent 1** (`agent1@delivery.com` / `Agent@123`). Advance status `PickedUp` &rarr; `InTransit` &rarr; `OutForDelivery` &rarr; `Failed` (Notes: "Customer phone unreachable").
-5. **Login as Customer**: Open order detail. See `Failed` status and notification in notification center. Click **Reschedule Delivery**, pick future date. Order updates to `Rescheduled` and auto-reassigns Agent 2 (`Vikram Agent`).
-6. **Login as Agent 2** (`agent2@delivery.com` / `Agent@123`). Advance status `OutForDelivery` &rarr; `Delivered`.
-7. **Verify Complete Audit Trail**: Order timeline displays all 8 immutable status history events, and Admin sees complete multi-channel dispatch logs.
+DeliveryTracker is configured for zero-cost public hosting:
+- **Frontend SPA (Vercel)**: Deployed with root monorepo `vercel.json` routing rules to [https://delivery-tracker-weld.vercel.app/](https://delivery-tracker-weld.vercel.app/).
+- **Backend Web Service (Render)**: Containerized Docker service deployed to [https://deliverytracker-bhmh.onrender.com](https://deliverytracker-bhmh.onrender.com).
+- **Persistence (Render PostgreSQL)**: Automated EF Core schema creation and master data seeding.
+- **Email Delivery (Resend)**: HTTPS REST API email delivery over Port 443.
+- **SMS Delivery (Twilio)**: Real-time SMS notifications to verified customer phone numbers.
 
 ---
 
-# Design Decisions
+# Submission Notes
 
-- **SQLite Database**: Self-contained file database enabling instant grading without external database server installation.
-- **EF Core Migrations**: Database schema controlled strictly via EF migrations (`Database.Migrate()`) rather than `EnsureCreated()`.
-- **JWT Claim Scoping**: `CustomerId` and `AgentId` derived from authenticated JWT claims (`sub`), preventing cross-customer data tampering.
-- **Immutable Status Audit Trail**: Status changes are recorded in append-only `OrderStatusHistory` table rather than updating inline strings.
-- **Failure-Safe Communication Abstraction**: `INotificationService` isolates provider calls inside try-catch boundaries, ensuring core operational transactions are never blocked by network latency or provider downtime.
-- **Operational UI Aesthetics**: Focused UI built with Vanilla CSS tokens, precise typography, dark slate palette, and zero generic marketing templates.
-
----
-
-# Live Production Deployment
-
-DeliveryTracker is publicly deployed and operational using **Vercel** for the React frontend, **Render** for the containerized ASP.NET Core API, and **Render Free PostgreSQL** for persistence:
-
-- **Live Application (Frontend)**: [https://delivery-tracker-weld.vercel.app/](https://delivery-tracker-weld.vercel.app/)
-- **Live Backend API**: [https://deliverytracker-bhmh.onrender.com](https://deliverytracker-bhmh.onrender.com)
-- **Interactive Swagger Documentation**: [https://deliverytracker-bhmh.onrender.com/swagger](https://deliverytracker-bhmh.onrender.com/swagger)
-- **API Health Check**: [https://deliverytracker-bhmh.onrender.com/api/health](https://deliverytracker-bhmh.onrender.com/api/health)
-
----
-
-# Production Architecture & Deployment Guide
-
-### 1. Backend Web Service (Render)
-- **Deployment Type**: Web Service (Docker runtime using root `Dockerfile`).
-- **Live Service**: `https://deliverytracker-bhmh.onrender.com`
-- **Database Engine (Production)**: **Render Free PostgreSQL** (`Npgsql.EntityFrameworkCore.PostgreSQL`).
-- **Port Configuration**: Automatically binds to Render's dynamic `$PORT` environment variable (`http://0.0.0.0:${PORT}`).
-- **Health Check Endpoint**: `/api/health`
-- **Environment Variables**:
-  - `ConnectionStrings__DefaultConnection`: Internal Render PostgreSQL connection URL.
-  - `ALLOWED_ORIGINS`: `https://delivery-tracker-weld.vercel.app,http://localhost:5173`.
-  - `Jwt__SecretKey`: Production JWT signing key.
-  - `NOTIFICATION_MODE`: `Real`.
-  - `EMAIL_ENABLED` / `SMTP_*`: Google Gmail SMTP provider credentials.
-  - `SMS_ENABLED` / `TWILIO_*`: Twilio REST API provider credentials.
-
-### 2. Frontend Application (Vercel)
-- **Deployment Type**: Vite SPA
-- **Live URL**: `https://delivery-tracker-weld.vercel.app/`
-- **Root Directory**: `DeliveryTracker.Web`
-- **Build Command**: `npm run build`
-- **Output Directory**: `dist`
-- **SPA Routing**: Handled automatically via root and subfolder `vercel.json` rewrite rules.
-- **Environment Variable**:
-  ```env
-  VITE_API_BASE_URL=https://deliverytracker-bhmh.onrender.com/api
-  ```
+- **Repository Main Branch**: [`https://github.com/VaishnavSreekumar/DeliveryTracker`](https://github.com/VaishnavSreekumar/DeliveryTracker)
+- **Live System Verification**: All core features (Authentication, Quote Calculation, Order Creation, Agent Auto-Assignment, State Transitions, Failure Recovery, Rescheduling, Notifications, and Admin Management) are verified live on both local and hosted environments.
+- **Clean Repository**: 0 secrets, passwords, or raw tokens exist in tracked repository files.
