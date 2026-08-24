@@ -82,26 +82,35 @@ var allowedOriginsEnv = Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")
     ?? builder.Configuration["Cors:AllowedOrigins"] 
     ?? "";
 
-var allowedOrigins = new List<string> { "http://localhost:5173", "http://localhost:3000" };
+var customOrigins = new List<string>();
 if (!string.IsNullOrWhiteSpace(allowedOriginsEnv))
 {
     var extraOrigins = allowedOriginsEnv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    foreach (var o in extraOrigins)
-    {
-        if (!allowedOrigins.Contains(o, StringComparer.OrdinalIgnoreCase))
-        {
-            allowedOrigins.Add(o);
-        }
-    }
+    customOrigins.AddRange(extraOrigins);
 }
 
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
-        policy.WithOrigins(allowedOrigins.ToArray())
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials());
+        policy.SetIsOriginAllowed(origin =>
+        {
+            if (string.IsNullOrWhiteSpace(origin)) return false;
+            try
+            {
+                var uri = new Uri(origin);
+                return uri.Host == "localhost" 
+                    || uri.Host == "127.0.0.1"
+                    || uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase)
+                    || customOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        })
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials());
 });
 
 // Register Services
