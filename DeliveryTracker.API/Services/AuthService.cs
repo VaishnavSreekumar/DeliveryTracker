@@ -33,11 +33,22 @@ public class AuthService : IAuthService
             throw new InvalidOperationException($"User with email '{request.Email}' already exists.");
         }
 
+        if (string.IsNullOrWhiteSpace(request.PhoneNumber))
+        {
+            throw new ArgumentException("Phone number is required.");
+        }
+
+        var trimmedPhone = request.PhoneNumber.Trim();
+        if (!System.Text.RegularExpressions.Regex.IsMatch(trimmedPhone, @"^\+?[1-9]\d{7,14}$"))
+        {
+            throw new ArgumentException("Phone number must be a valid international number in E.164 format (e.g. +919037350803).");
+        }
+
         var user = new User
         {
             FullName = request.FullName,
             Email = request.Email.ToLower(),
-            PhoneNumber = request.PhoneNumber,
+            PhoneNumber = trimmedPhone,
             Role = UserRole.Customer, // Public registration is strictly Customer
             CreatedAt = DateTime.UtcNow
         };

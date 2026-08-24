@@ -11,8 +11,8 @@
 | :--- | :--- | :--- |
 | `dotnet build` (API) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
 | `dotnet build` (Tests) | ✅ **Compiles clean** | 0 Warnings, 0 Errors |
-| `dotnet test` (85 tests) | ✅ **85/85 PASSED** | Failed: 0, Passed: 85, Skipped: 0 |
-| `npm run build` (Frontend) | ✅ **Exit 0** | TypeScript compiled clean, Vite bundle 307.48 kB |
+| `dotnet test` (97 tests) | ✅ **97/97 PASSED** | Failed: 0, Passed: 97, Skipped: 0 |
+| `npm run build` (Frontend) | ✅ **Exit 0** | TypeScript compiled clean, Vite bundle 308.46 kB |
 
 ### Test Suite Breakdown
 | Test Class | Tests | Coverage |
@@ -27,7 +27,8 @@
 | `AdminConfigurationTests` | 6 | Zones CRUD, Areas CRUD & Zone Reassignment, RateCards update, dynamic pricing |
 | `AdminOrderOperationsTests` | 4 | Order booking for customer, manual agent assignment, status override, multi-filter |
 | `CommunicationNotificationTests` | 6 | Multi-channel dispatch (InApp, Email, SMS) on every transition, provider fault safety, live vs simulation status, customer isolation, admin audit log |
-| **Total** | **85** | **100% Pass Rate** |
+| `CustomerPhoneNumberTests` | 12 | Customer phone registration validation, E.164 persistence, dynamic recipient resolution, customer phone isolation, Twilio mock accepted/rejected delivery statuses |
+| **Total** | **97** | **100% Pass Rate** |
 
 ---
 
@@ -69,3 +70,4 @@
 | **CFG-001** | Dynamic Admin Configuration Management | Implemented complete Zones, Areas (with Zone Reassignment), and RateCards CRUD APIs and frontend UI with dynamic pricing reflection. | **Phase D1 (1b3fbac)** |
 | **OPS-001** | Admin Order Operations & Privileged Override | Implemented Admin order creation on behalf of customer, manual agent assignment, multi-dimensional filtering, and privileged status override with audit logging. | **Phase D2 (c0531a7)** |
 | **COM-001** | Multi-Channel Communication Integration | Implemented provider abstractions (`INotificationService`, `IEmailNotificationProvider`, `ISmsNotificationProvider`), InApp + Email + SMS event triggers, failure safety, `.env.example` templates, and Admin communication activity audit logs. | **Phase D3** |
+| **COM-002** | Customer Phone Number & Real Twilio SMS | Required `PhoneNumber` at registration (`Users.PhoneNumber`), EF Core migration `MakePhoneNumberRequired`, dynamic resolution of customer phone number as Twilio `To`, live provider fault isolation and audit logging. | **Phase E** |

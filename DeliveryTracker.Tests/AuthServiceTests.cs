@@ -110,7 +110,7 @@ public class AuthServiceTests
         var (db, config) = GetInMemoryContext(nameof(Test3_DuplicateRegistration_ThrowsInvalidOperationException));
         var authService = new AuthService(db, config);
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => authService.RegisterAsync(new RegisterRequest { FullName = "Dup User", Email = "alice@delivery.com", Password = "Password123" }));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => authService.RegisterAsync(new RegisterRequest { FullName = "Dup User", Email = "alice@delivery.com", Password = "Password123", PhoneNumber = "+919037350803" }));
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public class AuthServiceTests
         var (db, config) = GetInMemoryContext(nameof(Test4_CustomerReceivesJWT_ValidClaims));
         var authService = new AuthService(db, config);
 
-        var response = await authService.RegisterAsync(new RegisterRequest { FullName = "New Customer", Email = "newcust@delivery.com", Password = "Password123" });
+        var response = await authService.RegisterAsync(new RegisterRequest { FullName = "New Customer", Email = "newcust@delivery.com", Password = "Password123", PhoneNumber = "+919037350803" });
 
         Assert.NotEmpty(response.Token);
 

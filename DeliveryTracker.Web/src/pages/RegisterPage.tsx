@@ -107,14 +107,22 @@ export const RegisterPage: React.FC<RegisterPageProps> = ({ onNavigateLogin }) =
           </div>
 
           <div style={{ marginBottom: '1rem' }}>
-            <label className="label">Phone Number (for SMS Notifications)</label>
+            <label className="label">
+              Phone Number <span style={{ color: '#f43f5e' }}>*</span> (for Real SMS Notifications)
+            </label>
             <input
               type="tel"
               className="input-field"
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="e.g. +91 98765 43210 (E.164 format)"
+              placeholder="+919037350803"
+              pattern="^\+?[1-9]\d{7,14}$"
+              title="Please enter a valid international phone number (e.g. +919037350803)"
+              required
             />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.25rem' }}>
+              E.164 international format required (e.g., +919037350803)
+            </span>
           </div>
 
           <div style={{ marginBottom: '1.25rem' }}>

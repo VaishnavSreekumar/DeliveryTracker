@@ -154,8 +154,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange
                 <div style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {user?.fullName}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--brand-primary)', fontWeight: 600 }}>
-                  {user?.role}
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  <span style={{ color: 'var(--brand-primary)', fontWeight: 600 }}>{user?.role}</span>
+                  {user?.phoneNumber && ` • ${user.phoneNumber}`}
                 </div>
               </div>
             </div>

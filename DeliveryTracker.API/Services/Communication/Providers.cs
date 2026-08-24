@@ -49,11 +49,11 @@ public class SmtpEmailProvider : IEmailNotificationProvider
             return CommunicationResult.Ok("SmtpEmailProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
         }
 
-        var host = _configuration["Notification:Email:Smtp:Host"] ?? _configuration["SMTP_HOST"];
-        var portStr = _configuration["Notification:Email:Smtp:Port"] ?? _configuration["SMTP_PORT"];
-        var username = _configuration["Notification:Email:Smtp:Username"] ?? _configuration["SMTP_USERNAME"];
-        var password = _configuration["Notification:Email:Smtp:Password"] ?? _configuration["SMTP_PASSWORD"];
-        var fromAddress = _configuration["Notification:Email:FromAddress"] ?? _configuration["SMTP_FROM"] ?? _configuration["NOTIFICATION_EMAIL_FROM"] ?? "notifications@deliverytracker.com";
+        var host = GetConfig("Notification:Email:Smtp:Host", "SMTP_HOST");
+        var portStr = GetConfig("Notification:Email:Smtp:Port", "SMTP_PORT") ?? "587";
+        var username = GetConfig("Notification:Email:Smtp:Username", "SMTP_USERNAME");
+        var password = GetConfig("Notification:Email:Smtp:Password", "SMTP_PASSWORD");
+        var fromAddress = GetConfig("Notification:Email:FromAddress", "SMTP_FROM") ?? GetConfig("NOTIFICATION_EMAIL_FROM", "NOTIFICATION_EMAIL_FROM") ?? "notifications@deliverytracker.com";
 
         int port = 587;
         bool isConfigured = !string.IsNullOrWhiteSpace(host)
@@ -78,6 +78,7 @@ public class SmtpEmailProvider : IEmailNotificationProvider
             using var client = new SmtpClient(host, port)
             {
                 EnableSsl = true,
+                Timeout = 15000,
                 Credentials = new NetworkCredential(username, password)
             };
 
@@ -95,6 +96,20 @@ public class SmtpEmailProvider : IEmailNotificationProvider
             _logger.LogError(ex, "Failed to send real SMTP email to {Recipient}", recipientEmail);
             return CommunicationResult.Fail("SmtpEmailProvider", ex.Message);
         }
+    }
+
+    private string? GetConfig(string configKey, string envKey)
+    {
+        var envVal = Environment.GetEnvironmentVariable(envKey);
+        if (!string.IsNullOrWhiteSpace(envVal)) return envVal.Trim();
+
+        var direct = _configuration[envKey];
+        if (!string.IsNullOrWhiteSpace(direct)) return direct.Trim();
+
+        var nested = _configuration[configKey];
+        if (!string.IsNullOrWhiteSpace(nested)) return nested.Trim();
+
+        return null;
     }
 }
 
@@ -126,29 +141,29 @@ public class TwilioSmsProvider : ISmsNotificationProvider
     {
         _configuration = configuration;
         _logger = logger;
-        _httpClient = httpClient ?? new HttpClient();
+        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(5) };
     }
 
     public async Task<CommunicationResult> SendSmsAsync(string recipientPhone, string message, string eventType, int? orderId = null)
     {
-        var enabled = _configuration["SMS_ENABLED"] ?? _configuration["Notification:Sms:Enabled"] ?? "true";
+        var enabled = GetConfig("Notification:Sms:Enabled", "SMS_ENABLED") ?? "true";
         if (enabled.Equals("false", StringComparison.OrdinalIgnoreCase))
         {
             return CommunicationResult.Ok("TwilioSmsProvider(Disabled)", "DISABLED");
         }
 
-        var mode = _configuration["NOTIFICATION_MODE"] ?? _configuration["Notification:Mode"] ?? "Real";
+        var mode = GetConfig("Notification:Mode", "NOTIFICATION_MODE") ?? "Real";
         if (mode.Equals("Simulation", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation("[TWILIO SIMULATION] Explicit simulation mode. Simulating SMS to {Phone}: {Message}", recipientPhone, message);
             return CommunicationResult.Ok("TwilioSmsProvider(Simulated)", Guid.NewGuid().ToString("N")[..8]);
         }
 
-        var accountSid = _configuration["Notification:Sms:Twilio:AccountSid"] ?? _configuration["TWILIO_ACCOUNT_SID"];
-        var apiKey = _configuration["TWILIO_API_KEY"];
-        var apiSecret = _configuration["TWILIO_API_SECRET"];
-        var authToken = _configuration["Notification:Sms:Twilio:AuthToken"] ?? _configuration["TWILIO_AUTH_TOKEN"];
-        var fromNumber = _configuration["Notification:Sms:FromNumber"] ?? _configuration["TWILIO_FROM_NUMBER"] ?? _configuration["NOTIFICATION_SMS_FROM"] ?? "+18005550199";
+        var accountSid = GetConfig("Notification:Sms:Twilio:AccountSid", "TWILIO_ACCOUNT_SID");
+        var apiKey = GetConfig("TWILIO_API_KEY", "TWILIO_API_KEY");
+        var apiSecret = GetConfig("TWILIO_API_SECRET", "TWILIO_API_SECRET");
+        var authToken = GetConfig("Notification:Sms:Twilio:AuthToken", "TWILIO_AUTH_TOKEN");
+        var fromNumber = GetConfig("Notification:Sms:FromNumber", "TWILIO_FROM_NUMBER") ?? GetConfig("NOTIFICATION_SMS_FROM", "NOTIFICATION_SMS_FROM") ?? "+18005550199";
 
         // Determine basic auth credentials: (ApiKey:ApiSecret) OR (AccountSid:AuthToken)
         string authUser = !string.IsNullOrWhiteSpace(apiKey) && !apiKey.StartsWith("PASTE_") && !apiKey.StartsWith("YOUR_")
@@ -177,6 +192,18 @@ public class TwilioSmsProvider : ISmsNotificationProvider
 
         try
         {
+            var normalizedFrom = fromNumber.Trim();
+            if (!normalizedFrom.StartsWith("+"))
+            {
+                normalizedFrom = "+" + normalizedFrom;
+            }
+
+            var normalizedTo = recipientPhone.Trim().Replace(" ", "").Replace("-", "");
+            if (!normalizedTo.StartsWith("+"))
+            {
+                normalizedTo = "+" + normalizedTo;
+            }
+
             var requestUrl = $"https://api.twilio.com/2010-04-01/Accounts/{accountSid}/Messages.json";
             var request = new HttpRequestMessage(HttpMethod.Post, requestUrl);
             var byteArray = System.Text.Encoding.ASCII.GetBytes($"{authUser}:{authSecret}");
@@ -184,8 +211,8 @@ public class TwilioSmsProvider : ISmsNotificationProvider
 
             var formContent = new FormUrlEncodedContent(new[]
             {
-                new KeyValuePair<string, string>("To", recipientPhone),
-                new KeyValuePair<string, string>("From", fromNumber),
+                new KeyValuePair<string, string>("To", normalizedTo),
+                new KeyValuePair<string, string>("From", normalizedFrom),
                 new KeyValuePair<string, string>("Body", message)
             });
             request.Content = formContent;
@@ -206,5 +233,19 @@ public class TwilioSmsProvider : ISmsNotificationProvider
             _logger.LogError(ex, "Failed to send Twilio SMS to {Phone}", recipientPhone);
             return CommunicationResult.Fail("TwilioSmsProvider", ex.Message);
         }
+    }
+
+    private string? GetConfig(string configKey, string envKey)
+    {
+        var envVal = Environment.GetEnvironmentVariable(envKey);
+        if (!string.IsNullOrWhiteSpace(envVal)) return envVal.Trim();
+
+        var direct = _configuration[envKey];
+        if (!string.IsNullOrWhiteSpace(direct)) return direct.Trim();
+
+        var nested = _configuration[configKey];
+        if (!string.IsNullOrWhiteSpace(nested)) return nested.Trim();
+
+        return null;
     }
 }
