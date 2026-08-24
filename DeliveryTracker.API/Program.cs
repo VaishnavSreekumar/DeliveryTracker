@@ -119,10 +119,17 @@ builder.Services.AddScoped<IPricingService, PricingService>();
 // Email Provider Selection: HTTP (Resend HTTPS API for production) vs SMTP (Local development)
 var emailProviderType = Environment.GetEnvironmentVariable("EMAIL_PROVIDER") 
     ?? builder.Configuration["Notification:Email:Provider"] 
-    ?? "SMTP";
+    ?? "";
 
-if (emailProviderType.Equals("HTTP", StringComparison.OrdinalIgnoreCase) 
-    || emailProviderType.Equals("RESEND", StringComparison.OrdinalIgnoreCase))
+var resendApiKey = Environment.GetEnvironmentVariable("RESEND_API_KEY")
+    ?? Environment.GetEnvironmentVariable("HTTP_EMAIL_API_KEY")
+    ?? builder.Configuration["Notification:Email:Resend:ApiKey"];
+
+bool useHttpProvider = emailProviderType.Equals("HTTP", StringComparison.OrdinalIgnoreCase) 
+    || emailProviderType.Equals("RESEND", StringComparison.OrdinalIgnoreCase)
+    || (!string.IsNullOrWhiteSpace(resendApiKey) && !emailProviderType.Equals("SMTP", StringComparison.OrdinalIgnoreCase));
+
+if (useHttpProvider)
 {
     builder.Services.AddHttpClient<IEmailNotificationProvider, ResendEmailProvider>();
 }
